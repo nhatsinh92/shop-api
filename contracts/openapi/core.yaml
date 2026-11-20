@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.1.0
+  version: 0.2.0
   description: Auth, product, order and checkout. Phase 0 exposes health only; the real contract is Phase 1.
   license:
     name: UNLICENSED
@@ -9,6 +9,11 @@ info:
 servers:
   - url: http://localhost:8081
     description: Local service (behind the gateway at http://localhost:8080 in the demo)
+# Secure by default: cookieAuth (browser) or bearerAuth (gateway to service) as alternatives.
+# Public operations such as health opt out with `security: []`.
+security:
+  - cookieAuth: []
+  - bearerAuth: []
 tags:
   - name: health
     description: Liveness and readiness.
@@ -26,15 +31,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
+              examples:
+                up:
+                  value:
+                    status: UP
         '503':
           description: The service or one of its dependencies is down.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
+              examples:
+                down:
+                  value:
+                    status: DOWN
         default:
           $ref: './errors.yaml#/components/responses/InternalError'
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: >-
+        Used by the browser. The access token is an httpOnly cookie set by login and refresh; it is
+        never returned in a response body.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Used between the gateway and the services. The gateway reads the `access_token` cookie
+        (cookieAuth) and forwards it as `Authorization: Bearer`. Protected operations list
+        cookieAuth and bearerAuth as two alternative security requirement objects.
   schemas:
     Health:
       type: object
