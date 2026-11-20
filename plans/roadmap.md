@@ -6,7 +6,7 @@ Java 21, Spring Boot 4.0 (see "Deviations"), Gradle.
 
 | Phase | Epic | Deliverables | Done when | Status |
 | --- | --- | --- | --- | --- |
-| 0 | Bootstrap | Gradle multi-project, CLAUDE.md per module, CI + merge-gate, docker-compose, Makefile, branch protection, picker scripts and role prompts | `make demo` starts all containers on a clean machine; CI green on an empty module | In review (PR #1) |
+| 0 | Bootstrap | Gradle multi-project, CLAUDE.md per module, CI + merge-gate, docker-compose, Makefile, branch protection, picker scripts and role prompts | `make demo` starts all containers on a clean machine; CI green on an empty module | Done (#1) |
 | 1 | [Contract v1](epics/contract-v1.md) | OpenAPI for auth, products, cart, checkout, orders; shared error schema; idempotency header; package release | `@shop/api-contract@1.0.0` released; contract lint passes | Epic drafted, waiting for approval |
 | 2 | Auth + gateway | Login, refresh with rotation and grace period, logout, JWKS endpoint; gateway JWT verification, cookie → Bearer, routes, Redis rate limit | Expired token refresh works; revoked refresh token rejected; gateway rejects bad JWT | Not started |
 | 3 | Product | Catalog, product detail, flash-sale list, approximate stock; `product.updated` events | Seeded catalog served; event emitted on change (feeds FE `revalidateTag`) | Not started |
