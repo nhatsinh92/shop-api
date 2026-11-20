@@ -59,23 +59,27 @@ different approval mechanism before relying on `human-approved`.
 The hourly schedules stay as a fallback (resume after an interrupted run, missed events). GitHub
 event triggers start runs as soon as there is work. They are added in the web UI on each task's
 page (**Add trigger → GitHub event**); the Claude GitHub App must be installed on both
-repositories. A task's GitHub triggers can watch only one repository, so each role has a second
-task for `shop-web`:
+repositories. A task can have only **one** GitHub event trigger, and it watches only the task's
+first repository. So each trigger gets its own task:
 
-| Task | Repositories (first one is watched) | Schedule | GitHub triggers |
+| Task | Repositories (first one is watched) | Schedule | GitHub trigger |
 | --- | --- | --- | --- |
-| `shop-worker` | `shop-api`, `shop-web` | `5 * * * *` | worker triggers below, on `shop-api` |
-| `shop-worker-web` | `shop-web`, `shop-api` | none | worker triggers below, on `shop-web` |
-| `shop-reviewer` | `shop-api`, `shop-web` | `35 * * * *` | reviewer trigger below, on `shop-api` |
-| `shop-reviewer-web` | `shop-web`, `shop-api` | none | reviewer trigger below, on `shop-web` |
+| `shop-worker` | `shop-api`, `shop-web` | `5 * * * *` | PR merged, on `shop-api` |
+| `shop-worker-web` | `shop-web`, `shop-api` | none | PR merged, on `shop-web` |
+| `shop-worker-fix` | `shop-api`, `shop-web` | none | PR labeled `changes-requested`, on `shop-api` |
+| `shop-worker-fix-web` | `shop-web`, `shop-api` | none | PR labeled `changes-requested`, on `shop-web` |
+| `shop-reviewer` | `shop-api`, `shop-web` | `35 * * * *` | PR labeled `review`, on `shop-api` |
+| `shop-reviewer-web` | `shop-web`, `shop-api` | none | PR labeled `review`, on `shop-web` |
+| `shop-planner` | `shop-web`, `shop-api` | none (Run now) | none |
 
-The `-web` tasks use the same prompt, model and environment as their counterpart.
+All worker tasks use the `shop-worker` prompt and all reviewer tasks the `shop-reviewer` prompt,
+with the same model and environment; only the repository order, schedule and trigger differ.
 
-| Role | Event | Filters |
+| Trigger | Event | Filters |
 | --- | --- | --- |
-| reviewer | Pull request → labeled | Labels is one of `review`; Is draft equals `false` |
-| worker | Pull request → labeled | Labels is one of `changes-requested`; Head branch starts with `claude/issue-` |
-| worker | Pull request → closed | Is merged equals `true` |
+| PR merged | Pull request → closed | Is merged equals `true` |
+| PR labeled `changes-requested` | Pull request → labeled | Labels is one of `changes-requested`; Head branch starts with `claude/issue-` |
+| PR labeled `review` | Pull request → labeled | Labels is one of `review`; Is draft equals `false` |
 
 Several worker runs can start together (an event and the hourly run, or events in both
 repositories). Every worker run calls `scripts/claim.sh` right after the picker: it posts its
@@ -132,17 +136,11 @@ You are shop-reviewer for the "Mây" shop project. The repositories are at /home
 6. Finish with a one-line verdict and what the owner must do, if anything.
 ```
 
-## shop-worker-web and shop-reviewer-web
+## Trigger-only tasks (`-web`, `-fix`)
 
-GitHub event triggers can watch only the task's first repository, so each role has a twin whose
-first repository is `shop-web`. The twins exist only to react to `shop-web` events.
-
-| Setting | shop-worker-web | shop-reviewer-web |
-| --- | --- | --- |
-| Repositories (order matters) | `shop-web`, then `shop-api` | `shop-web`, then `shop-api` |
-| Schedule | None (GitHub triggers only) | None (GitHub triggers only) |
-| Model / environment | Same as `shop-worker` | Same as `shop-reviewer` |
-| Prompt | Exactly the `shop-worker` prompt | Exactly the `shop-reviewer` prompt |
+`shop-worker-web`, `shop-worker-fix`, `shop-worker-fix-web` and `shop-reviewer-web` exist only to
+carry one GitHub trigger each (see the table above). They have no schedule, and use exactly the
+prompt, model and environment of `shop-worker` or `shop-reviewer`.
 
 The prompts are deliberately shared: the pickers look at both repositories and pick the oldest or
 most urgent work wherever it is, and `claim.sh` keeps a single worker active. A web-only prompt
