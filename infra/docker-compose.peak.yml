@@ -1,0 +1,8 @@
+# Overlay for `make demo-peak`: the gateway reaches cart-service through toxiproxy so latency
+# and faults can be injected (toxiproxy API on :8474). Used together with docker-compose.yml.
+services:
+  gateway:
+    environment:
+      CART_SERVICE_URL: http://toxiproxy:18082
+    depends_on:
+      toxiproxy: { condition: service_started }

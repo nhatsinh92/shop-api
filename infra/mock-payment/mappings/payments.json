@@ -1,0 +1,43 @@
+{
+  "mappings": [
+    {
+      "name": "Payment succeeds (default)",
+      "priority": 10,
+      "request": { "method": "POST", "urlPath": "/payments" },
+      "response": {
+        "status": 201,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "paymentId": "{{randomValue type='UUID'}}", "status": "SUCCEEDED" }
+      }
+    },
+    {
+      "name": "Payment fails",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/payments",
+        "headers": { "X-Mock-Outcome": { "equalTo": "fail" } }
+      },
+      "response": {
+        "status": 402,
+        "headers": { "Content-Type": "application/problem+json" },
+        "jsonBody": { "type": "about:blank", "title": "Payment declined", "status": 402, "code": "PAYMENT_DECLINED" }
+      }
+    },
+    {
+      "name": "Payment times out",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/payments",
+        "headers": { "X-Mock-Outcome": { "equalTo": "timeout" } }
+      },
+      "response": {
+        "status": 504,
+        "fixedDelayMilliseconds": 30000,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "status": "TIMEOUT" }
+      }
+    }
+  ]
+}

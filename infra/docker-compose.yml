@@ -1,0 +1,174 @@
+# Local demo stack. `make demo` starts the default services; `make demo-peak` adds the `peak`
+# profile (toxiproxy, k6, Grafana). JVM heaps are capped so the stack fits in about 6-8 GB.
+name: shop
+
+x-jvm-app: &jvm-app
+  restart: unless-stopped
+  mem_limit: 512m
+  environment: &jvm-env
+    JAVA_TOOL_OPTIONS: >-
+      -Xms128m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+UseSerialGC -XX:TieredStopAtLevel=1
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop # local demo only
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports: ["6379:6379"]
+    mem_limit: 320m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redpanda:
+    image: redpandadata/redpanda:v26.1.21
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports: ["19092:19092"]
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mock-payment:
+    image: wiremock/wiremock:3.13.2
+    command: ["--port", "8090", "--disable-banner", "--global-response-templating"]
+    ports: ["8090:8090"]
+    volumes: ["./mock-payment:/home/wiremock:ro"]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8090/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  core:
+    <<: *jvm-app
+    build: { context: .., dockerfile: infra/app.Dockerfile, args: { MODULE: core } }
+    image: shop/core:local
+    environment:
+      <<: *jvm-env
+      DB_URL: jdbc:postgresql://postgres:5432/shop
+      DB_USER: shop
+      DB_PASSWORD: shop
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      PAYMENT_URL: http://mock-payment:8090
+      REDIS_HOST: redis
+    ports: ["8081:8081"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+      mock-payment: { condition: service_healthy }
+    healthcheck: &app-health
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health/readiness | grep -q UP"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 20s
+
+  cart-service:
+    <<: *jvm-app
+    build: { context: .., dockerfile: infra/app.Dockerfile, args: { MODULE: cart-service } }
+    image: shop/cart-service:local
+    environment:
+      <<: *jvm-env
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      CORE_URL: http://core:8081
+    ports: ["8082:8082"]
+    depends_on:
+      redis: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+    healthcheck:
+      <<: *app-health
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health/readiness | grep -q UP"]
+
+  gateway:
+    <<: *jvm-app
+    build: { context: .., dockerfile: infra/app.Dockerfile, args: { MODULE: gateway } }
+    image: shop/gateway:local
+    environment:
+      <<: *jvm-env
+      CORE_URL: http://core:8081
+      CART_SERVICE_URL: http://cart-service:8082
+      REDIS_HOST: redis
+    ports: ["8080:8080"]
+    depends_on:
+      core: { condition: service_healthy }
+      cart-service: { condition: service_healthy }
+    healthcheck:
+      <<: *app-health
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q UP"]
+
+  # Loads sample products, then exits. Re-run with `make seed`.
+  seed:
+    image: postgres:18-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: shop
+      PGPASSWORD: shop
+      PGDATABASE: shop
+    volumes: ["../seed:/seed:ro"]
+    entrypoint: ["sh", "/seed/seed.sh"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  # ---------- peak profile (placeholders, filled in Phase 6) ----------
+  toxiproxy:
+    profiles: [peak]
+    image: ghcr.io/shopify/toxiproxy:2.13.0
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    volumes: ["./peak/toxiproxy.json:/config/toxiproxy.json:ro"]
+    ports: ["8474:8474", "18082:18082"]
+    mem_limit: 128m
+
+  k6:
+    profiles: [peak]
+    image: grafana/k6:1.8.3
+    command: ["run", "/scripts/smoke.js"]
+    environment:
+      BASE_URL: http://gateway:8080
+    volumes: ["./peak/k6:/scripts:ro"]
+    depends_on:
+      gateway: { condition: service_healthy }
+    restart: "no"
+
+  grafana:
+    profiles: [peak]
+    image: grafana/grafana:13.1.2
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes: ["./peak/grafana/provisioning:/etc/grafana/provisioning:ro"]
+    ports: ["3001:3000"]
+    mem_limit: 256m
+
+volumes:
+  pgdata:
