@@ -40,6 +40,7 @@ cd /home/user/shop-api && bash scripts/next-plan.sh
 
    Add `infra-change` only when the task must touch protected paths, and say why in the issue.
    Create dependencies first so later issues can reference their numbers.
+
 4. Comment on the epic issue with the ordered task list and the dependency graph
    (`$T comment $R <epic> -`).
 

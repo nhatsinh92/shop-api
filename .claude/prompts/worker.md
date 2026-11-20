@@ -21,14 +21,14 @@ cd /home/user/shop-api && bash scripts/next-task.sh
 
 It prints one JSON object. Act on `action`:
 
-| action | what to do |
-| --- | --- |
-| `none` | Reply with the one-line reason and **end the run immediately**. Do nothing else. |
-| `error` | GitHub could not be read. Reply with the reason and end. Do not guess what to work on. |
-| `start` | Sections 2, 3 and 4. |
-| `resume` | Section 2 (resume), then 3 and 4. |
-| `fix` | Section 5. |
-| `triage` | Follow `.claude/prompts/triage.md` and end. |
+| action   | what to do                                                                             |
+| -------- | -------------------------------------------------------------------------------------- |
+| `none`   | Reply with the one-line reason and **end the run immediately**. Do nothing else.       |
+| `error`  | GitHub could not be read. Reply with the reason and end. Do not guess what to work on. |
+| `start`  | Sections 2, 3 and 4.                                                                   |
+| `resume` | Section 2 (resume), then 3 and 4.                                                      |
+| `fix`    | Section 5.                                                                             |
+| `triage` | Follow `.claude/prompts/triage.md` and end.                                            |
 
 `repo` is `owner/name`; work in that repository's checkout.
 
