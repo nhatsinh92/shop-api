@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -11,8 +11,118 @@ info:
 servers:
   - url: http://localhost:8080
 paths: {}
+x-error-codes:
+  # Catalogue of stable error codes. Add a code here in the task that introduces it; convention
+  # check (contracts/scripts/check-conventions.mjs) rejects problem examples with unknown codes.
+  VALIDATION_FAILED:
+    status: 400
+    description: >-
+      The request is malformed or a field is invalid; see errors[].
+  AUTH_UNAUTHENTICATED:
+    status: 401
+    description: >-
+      No valid access token was presented.
+  AUTH_FORBIDDEN:
+    status: 403
+    description: >-
+      The caller is authenticated but not allowed to do this.
+  NOT_FOUND:
+    status: 404
+    description: >-
+      The resource does not exist or is not visible to the caller.
+  CONFLICT:
+    status: 409
+    description: >-
+      The request conflicts with the current state of the resource.
+  IDEMPOTENCY_KEY_MISSING:
+    status: 400
+    description: >-
+      Idempotency-Key header is required on this operation.
+  IDEMPOTENCY_KEY_REUSED:
+    status: 422
+    description: >-
+      The Idempotency-Key was already used with a different request body.
+  UNPROCESSABLE_ENTITY:
+    status: 422
+    description: >-
+      The request is well formed but violates a business rule.
+  RATE_LIMITED:
+    status: 429
+    description: >-
+      Too many requests; retry after the Retry-After header.
+  INTERNAL_ERROR:
+    status: 500
+    description: >-
+      Unexpected server error.
+  SERVICE_UNAVAILABLE:
+    status: 503
+    description: >-
+      The service or a dependency is temporarily unavailable.
 components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor from a previous page's `nextCursor`. Omit for the first page.
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Client-generated UUID that makes POST /api/orders safe to retry. A replay with the same key
+        and body returns the original response; a different body returns 422 IDEMPOTENCY_KEY_REUSED.
+      schema:
+        type: string
+        format: uuid
   schemas:
+    Money:
+      type: object
+      description: Amount in VND (integer, no minor unit).
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          minimum: 0
+          examples: [890000]
+        currency:
+          type: string
+          const: VND
+    Sku:
+      type: string
+      description: Product stock-keeping unit.
+      examples: [SKU-001]
+    Slug:
+      type: string
+      description: URL-friendly product identifier.
+      examples: [ao-thun-basic]
+    Uuid:
+      type: string
+      format: uuid
+      examples: [3fa85f64-5717-4562-b3fc-2c963f66afa6]
+    CursorPage:
+      type: object
+      description: >-
+        Pattern for cursor-paginated lists. Later tasks define a concrete page schema with the same
+        shape, where `items` has a concrete item type. Query with the Limit and Cursor parameters.
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: {}
+        nextCursor:
+          type: [string, 'null']
+          description: Cursor for the next page, or null on the last page.
     Problem:
       type: object
       description: RFC 9457 problem details with a stable error code.
@@ -62,9 +172,140 @@ components:
         message:
           type: string
   responses:
+    BadRequest:
+      description: The request is malformed or fails validation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Validation failed
+                status: 400
+                code: VALIDATION_FAILED
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+                errors:
+                  - field: quantity
+                    code: VALIDATION_FAILED
+                    message: must be at least 1
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Unauthenticated
+                status: 401
+                code: AUTH_UNAUTHENTICATED
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+    Forbidden:
+      description: The caller is not allowed to do this.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Forbidden
+                status: 403
+                code: AUTH_FORBIDDEN
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Not found
+                status: 404
+                code: NOT_FOUND
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+    Conflict:
+      description: The request conflicts with the current state.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Conflict
+                status: 409
+                code: CONFLICT
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+    UnprocessableEntity:
+      description: The request violates a business rule.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Unprocessable entity
+                status: 422
+                code: UNPROCESSABLE_ENTITY
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+            minimum: 0
+          example: 5
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Too many requests
+                status: 429
+                code: RATE_LIMITED
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+    ServiceUnavailable:
+      description: The service or a dependency is unavailable.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Service unavailable
+                status: 503
+                code: SERVICE_UNAVAILABLE
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736
     InternalError:
       description: Unexpected server error.
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          examples:
+            default:
+              value:
+                type: about:blank
+                title: Internal error
+                status: 500
+                code: INTERNAL_ERROR
+                traceId: 4bf92f3577b34da6a3ce929d0e0e4736

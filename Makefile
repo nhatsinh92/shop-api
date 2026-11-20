@@ -23,8 +23,10 @@ lint: lint-java lint-contract ## All static checks
 lint-java: ## Spotless (google-java-format), Checkstyle, compiler warnings as errors
 	$(GRADLE) spotlessCheck checkstyleMain checkstyleTest compileTestJava
 
-lint-contract: ## OpenAPI lint and contract version consistency
+lint-contract: ## OpenAPI lint, contract version and convention checks
 	node contracts/scripts/check-version.mjs
+	node --test contracts/scripts/check-conventions.test.mjs
+	node contracts/scripts/check-conventions.mjs
 	$(REDOCLY) lint
 
 build: ## Build the three boot jars (no tests)

@@ -7,7 +7,13 @@ Services implement them; `shop-web` generates its types and mocks from the relea
 
 - `openapi/core.yaml`: auth, products, orders, checkout (served by `core` behind the gateway).
 - `openapi/cart.yaml`: cart (served by `cart-service`).
-- `openapi/errors.yaml`: shared RFC 9457 `Problem` schema and common responses.
+- `openapi/errors.yaml`: shared components every spec `$ref`s: `Money`, `Sku`, `Slug`, `Uuid`,
+  `CursorPage` and the `Limit` / `Cursor` parameters, the `IdempotencyKey` header parameter, the
+  `Problem` schema, shared problem responses (`BadRequest`, `Unauthorized`, `Forbidden`,
+  `NotFound`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`, `ServiceUnavailable`,
+  `InternalError`) and the error-code catalogue `x-error-codes`.
+- `scripts/check-conventions.mjs`: the convention check (see Rules); `check-conventions.test.mjs`
+  holds its fixture tests (`node --test`).
 - `package.json`: the package `@shop/api-contract`. Its `version` is the contract version.
 
 ## Versioning and release
@@ -29,3 +35,10 @@ Services implement them; `shop-web` generates its types and mocks from the relea
   `redocly.yaml` (protected paths).
 - Every operation has an `operationId`, a tag, a `4xx` response using `Problem` and examples for
   request bodies.
+- Add every new error code to `x-error-codes` in `errors.yaml` (status and meaning) in the task that
+  introduces it. `Problem.code` stays a pattern-constrained string, never an enum.
+- Protected operations list `cookieAuth` and `bearerAuth` as two alternative requirement objects;
+  public ones set `security: []`. Specs default to both schemes.
+- `make lint-contract` runs the convention check: every operation needs an `operationId`, a tag, an
+  example on JSON request bodies and 2xx JSON responses, and a 4xx (or `default`) response using
+  `application/problem+json` with `Problem`, whose examples use catalogued codes.
