@@ -1,0 +1,40 @@
+# End-to-end smoke of the docker-compose stack: on main, and on PRs labelled `e2e`.
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stack:
+    name: e2e
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start the demo stack
+        run: make demo
+      - name: Smoke checks through the gateway
+        run: |
+          curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'
+          curl -fsS http://localhost:8081/actuator/health | grep -q '"status":"UP"'
+          curl -fsS http://localhost:8082/actuator/health | grep -q '"status":"UP"'
+          curl -fsS -X POST http://localhost:8090/payments | grep -q SUCCEEDED
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color --tail=200
+      - name: Stop
+        if: always()
+        run: make demo-down
