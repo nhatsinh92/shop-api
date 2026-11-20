@@ -10,7 +10,7 @@ REDOCLY := npx --yes @redocly/cli@2.82.0
 COMPOSE := docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract build demo demo-peak demo-down seed lock
+.PHONY: help test lint lint-java lint-contract build demo demo-peak demo-down seed lock test-scripts
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -54,3 +54,7 @@ seed: ## Reload the sample catalog into the running demo database
 
 lock: ## Refresh gradle.lockfile after changing dependencies
 	$(GRADLE) resolveAndLockAll --write-locks
+
+test-scripts: ## Tests for the orchestration scripts and the agent guard hook (needs jq)
+	bash scripts/tests/picker.test.sh
+	bash scripts/tests/guard.test.sh
