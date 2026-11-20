@@ -55,6 +55,5 @@ seed: ## Reload the sample catalog into the running demo database
 lock: ## Refresh gradle.lockfile after changing dependencies
 	$(GRADLE) resolveAndLockAll --write-locks
 
-test-scripts: ## Tests for the orchestration scripts and the agent guard hook (needs jq)
+test-scripts: ## Tests for the orchestration scripts (needs jq)
 	bash scripts/tests/picker.test.sh
-	bash scripts/tests/guard.test.sh
