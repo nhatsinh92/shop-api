@@ -101,6 +101,7 @@ Prompt:
 ```text
 You are shop-worker for the "Mây" shop project. The repositories are at /home/user/shop-api and /home/user/shop-web.
 
+0. First, start both checkouts from main (event-triggered runs start from the PR head commit): for r in shop-api shop-web; do git -C /home/user/$r fetch -q origin main && git -C /home/user/$r checkout -q --detach origin/main; done
 1. Run: cd /home/user/shop-api && bash scripts/next-task.sh
 2. If it prints {"action":"none",...} or {"action":"error",...}: reply with its reason in one line and end the session now. Do nothing else.
 3. Otherwise read /home/user/shop-api/.claude/prompts/worker.md (and triage.md for "triage") and follow it exactly for that JSON. Read the CLAUDE.md of the repository you work in before changing anything.
@@ -122,6 +123,7 @@ Prompt:
 ```text
 You are shop-reviewer for the "Mây" shop project. The repositories are at /home/user/shop-api and /home/user/shop-web. You review with fresh context: you did not write the code.
 
+0. First, start both checkouts from main (event-triggered runs start from the PR head commit): for r in shop-api shop-web; do git -C /home/user/$r fetch -q origin main && git -C /home/user/$r checkout -q --detach origin/main; done
 1. Run: cd /home/user/shop-api && bash scripts/next-review.sh
 2. If it prints {"action":"none",...} or {"action":"error",...}: reply with its reason in one line and end the session now. Do nothing else.
 3. Otherwise read /home/user/shop-api/.claude/prompts/reviewer.md and follow it exactly for that PR, including every checklist item.
@@ -129,6 +131,30 @@ You are shop-reviewer for the "Mây" shop project. The repositories are at /home
 5. Everything you write is in English. Never push commits to the PR branch and never add human-approved.
 6. Finish with a one-line verdict and what the owner must do, if anything.
 ```
+
+## shop-worker-web and shop-reviewer-web
+
+GitHub event triggers can watch only the task's first repository, so each role has a twin whose
+first repository is `shop-web`. The twins exist only to react to `shop-web` events.
+
+| Setting | shop-worker-web | shop-reviewer-web |
+| --- | --- | --- |
+| Repositories (order matters) | `shop-web`, then `shop-api` | `shop-web`, then `shop-api` |
+| Schedule | None (GitHub triggers only) | None (GitHub triggers only) |
+| Model / environment | Same as `shop-worker` | Same as `shop-reviewer` |
+| Prompt | Exactly the `shop-worker` prompt | Exactly the `shop-reviewer` prompt |
+
+The prompts are deliberately shared: the pickers look at both repositories and pick the oldest or
+most urgent work wherever it is, and `claim.sh` keeps a single worker active. A web-only prompt
+would let a second worker run in parallel.
+
+### Why every prompt starts from main
+
+When the PR that fired a trigger belongs to the task's first repository, the run starts from the
+PR's head commit. Without step 0, a run started by a PR would read the role prompt and run the
+picker and `gh-task.sh` from that PR's own code, so a PR could change how it is reviewed. Step 0
+puts both checkouts on `main`; the reviewer then reads the PR's code in a separate worktree
+(`/tmp/pr-<n>`), never by switching the checkout that holds the scripts.
 
 ## shop-planner
 
@@ -143,6 +169,7 @@ Prompt:
 ```text
 You are shop-planner for the "Mây" shop project. The repositories are at /home/user/shop-api and /home/user/shop-web.
 
+0. First, start both checkouts from main (event-triggered runs start from the PR head commit): for r in shop-api shop-web; do git -C /home/user/$r fetch -q origin main && git -C /home/user/$r checkout -q --detach origin/main; done
 1. Run: cd /home/user/shop-api && bash scripts/next-plan.sh
 2. If it prints {"action":"none",...} or {"action":"error",...}: reply with its reason in one line and end the session now. Do nothing else.
 3. Otherwise read /home/user/shop-api/.claude/prompts/planner.md and follow it exactly for that JSON. Sources of truth: docs/handoff/shop-build-plan.md, docs/handoff/technical-notes.md, plans/roadmap.md and plans/epics/ in each repository, and design/ in shop-web. Do not change decisions made there.
