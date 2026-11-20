@@ -1,0 +1,70 @@
+openapi: 3.1.1
+info:
+  title: Shop shared error schema
+  version: 0.1.0
+  description: >-
+    Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
+    RFC 9457 (problem details) with a stable machine-readable `code`.
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+servers:
+  - url: http://localhost:8080
+paths: {}
+components:
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details with a stable error code.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: URI reference that identifies the problem type.
+        title:
+          type: string
+          description: Short, human-readable summary of the problem type.
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence.
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          description: Stable machine-readable error code, for example CART_QTY_LIMIT.
+          examples: [CART_QTY_LIMIT]
+        traceId:
+          type: string
+          description: Correlation id for logs and traces.
+        errors:
+          type: array
+          description: Field-level validation errors, if any.
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required: [field, code]
+      properties:
+        field:
+          type: string
+          description: JSON pointer or dotted path of the invalid field.
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+        message:
+          type: string
+  responses:
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'

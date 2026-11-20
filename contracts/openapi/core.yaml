@@ -1,0 +1,45 @@
+openapi: 3.1.1
+info:
+  title: Shop core API
+  version: 0.1.0
+  description: Auth, product, order and checkout. Phase 0 exposes health only; the real contract is Phase 1.
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+servers:
+  - url: http://localhost:8081
+    description: Local service (behind the gateway at http://localhost:8080 in the demo)
+tags:
+  - name: health
+    description: Liveness and readiness.
+paths:
+  /actuator/health:
+    get:
+      operationId: coreHealth
+      summary: Service health
+      tags: [health]
+      security: []
+      responses:
+        '200':
+          description: The service is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: The service or one of its dependencies is down.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        default:
+          $ref: './errors.yaml#/components/responses/InternalError'
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]

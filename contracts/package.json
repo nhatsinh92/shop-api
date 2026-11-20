@@ -1,0 +1,20 @@
+{
+  "name": "@shop/api-contract",
+  "version": "0.1.0",
+  "description": "OpenAPI contract for the shop-api services (source of truth for shop-web).",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nhatsinh92/shop-api.git",
+    "directory": "contracts"
+  },
+  "files": [
+    "openapi/"
+  ],
+  "exports": {
+    "./openapi/core.yaml": "./openapi/core.yaml",
+    "./openapi/cart.yaml": "./openapi/cart.yaml",
+    "./openapi/errors.yaml": "./openapi/errors.yaml",
+    "./package.json": "./package.json"
+  }
+}
