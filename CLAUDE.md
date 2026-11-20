@@ -31,6 +31,7 @@ issues, PR titles and descriptions, review comments, commit messages and branch 
 | `make demo-peak` | Demo plus toxiproxy in front of cart-service, a k6 run and Grafana (:3001) |
 | `make demo-down` | Stop the stack |
 | `make lock` | Refresh `gradle.lockfile` after changing dependencies (commit the result) |
+| `make test-scripts` | Tests for the picker scripts and the agent guard hook (needs jq) |
 | `./gradlew spotlessApply` | Format Java and Gradle files before committing |
 
 Run `make lint test` before every push. If Docker is not available in your environment,
@@ -47,7 +48,8 @@ cart-service/        Redis cart, hot path at peak
 seed/                sample catalog for the demo
 infra/               docker-compose.yml (+ peak overlay), app.Dockerfile, mock payment, k6, Grafana
 plans/               roadmap.md and epics/ (approved by the owner)
-scripts/             next-task.sh, next-review.sh, cloud-setup.sh (orchestration, no model calls)
+scripts/             next-task.sh, next-review.sh, next-plan.sh, heartbeat.sh, cloud-setup.sh
+                     (orchestration, no model calls; see docs/scheduled-tasks.md)
 .claude/             role prompts, settings and guard hooks for agent sessions
 .github/             CI, merge-gate, contract-publish workflows and policy scripts
 ```
