@@ -1,0 +1,58 @@
+# Releases @shop/api-contract when contracts/package.json carries a version that has no release yet.
+# The package tarball is attached to the GitHub Release `contract-v<version>`; shop-web pins its URL.
+# Uses only GITHUB_TOKEN (contents: write to create the release). Never calls a model.
+name: contract-publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: contract-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Read the contract version
+        id: version
+        run: |
+          version=$(node -p "require('./contracts/package.json').version")
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          if gh release view "contract-v$version" >/dev/null 2>&1; then
+            echo "exists=true" >>"$GITHUB_OUTPUT"
+            echo "contract-v$version is already released; nothing to do."
+          else
+            echo "exists=false" >>"$GITHUB_OUTPUT"
+          fi
+      - name: Lint before release
+        if: steps.version.outputs.exists == 'false'
+        run: make lint-contract
+      - name: Pack and release
+        if: steps.version.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tarball=$(cd contracts && npm pack --silent)
+          gh release create "contract-v$VERSION" "contracts/$tarball" \
+            --target "$GITHUB_SHA" \
+            --title "@shop/api-contract $VERSION" \
+            --notes "Install in shop-web: \`pnpm add https://github.com/$GITHUB_REPOSITORY/releases/download/contract-v$VERSION/$tarball\`"

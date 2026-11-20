@@ -1,0 +1,17 @@
+# OpenAPI lint configuration (protected path: lint config).
+extends:
+  - recommended-strict
+rules:
+  info-license-strict: off
+  # Local servers are the only servers until a deployment exists.
+  no-server-example.com: off
+apis:
+  core:
+    root: contracts/openapi/core.yaml
+  cart:
+    root: contracts/openapi/cart.yaml
+  errors:
+    root: contracts/openapi/errors.yaml
+    rules:
+      # errors.yaml is a shared component library referenced by the other specs.
+      no-unused-components: off

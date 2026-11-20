@@ -1,0 +1,8 @@
+[
+  {
+    "name": "cart-service",
+    "listen": "0.0.0.0:18082",
+    "upstream": "cart-service:8082",
+    "enabled": true
+  }
+]
