@@ -59,16 +59,31 @@ different approval mechanism before relying on `human-approved`.
 The hourly schedules stay as a fallback (resume after an interrupted run, missed events). GitHub
 event triggers start runs as soon as there is work. They are added in the web UI on each task's
 page (**Add trigger → GitHub event**); the Claude GitHub App must be installed on both
-repositories. Add each trigger once per repository (`shop-api` and `shop-web`).
+repositories. A task's GitHub triggers can watch only one repository, so each role has a second
+task for `shop-web`:
 
-| Task | Event | Filters |
+| Task | Repositories (first one is watched) | Schedule | GitHub triggers |
+| --- | --- | --- | --- |
+| `shop-worker` | `shop-api`, `shop-web` | `5 * * * *` | worker triggers below, on `shop-api` |
+| `shop-worker-web` | `shop-web`, `shop-api` | none | worker triggers below, on `shop-web` |
+| `shop-reviewer` | `shop-api`, `shop-web` | `35 * * * *` | reviewer trigger below, on `shop-api` |
+| `shop-reviewer-web` | `shop-web`, `shop-api` | none | reviewer trigger below, on `shop-web` |
+
+The `-web` tasks use the same prompt, model and environment as their counterpart.
+
+| Role | Event | Filters |
 | --- | --- | --- |
-| `shop-reviewer` | Pull request → labeled | Labels is one of `review`; Is draft equals `false` |
-| `shop-worker` | Pull request → labeled | Labels is one of `changes-requested`; Head branch starts with `claude/issue-` |
-| `shop-worker` | Pull request → closed | Is merged equals `true` |
+| reviewer | Pull request → labeled | Labels is one of `review`; Is draft equals `false` |
+| worker | Pull request → labeled | Labels is one of `changes-requested`; Head branch starts with `claude/issue-` |
+| worker | Pull request → closed | Is merged equals `true` |
+
+Several worker runs can start together (an event and the hourly run, or events in both
+repositories). Every worker run calls `scripts/claim.sh` right after the picker: it posts its
+heartbeat, waits 15 seconds, and continues only if no older fresh worker heartbeat exists; the
+others end at once.
 
 Why these are safe to fire often: the pickers decide what to do, so an extra run ends at once with
-`{"action":"none"}`; worker heartbeats keep a single worker active; the reviewer skips a PR another
+`{"action":"none"}`; heartbeats and `claim.sh` keep a single worker active; the reviewer skips a PR another
 reviewer is already on. Workers add `review` only after CI is green, so a reviewer started by the
 label finds green checks. Each run costs some quota even when it ends at once, and GitHub events
 above the per-task hourly cap are dropped (the hourly schedule then catches up).
