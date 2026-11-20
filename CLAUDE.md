@@ -31,12 +31,20 @@ issues, PR titles and descriptions, review comments, commit messages and branch 
 | `make demo-peak` | Demo plus toxiproxy in front of cart-service, a k6 run and Grafana (:3001) |
 | `make demo-down` | Stop the stack |
 | `make lock` | Refresh `gradle.lockfile` after changing dependencies (commit the result) |
-| `make test-scripts` | Tests for the picker scripts and the agent guard hook (needs jq) |
+| `make test-scripts` | Fixture tests for the picker scripts (needs jq) |
 | `./gradlew spotlessApply` | Format Java and Gradle files before committing |
 
-Run `make lint test` before every push. If Docker is not available in your environment,
-Testcontainers tests cannot run locally: push, then read the CI result with `gh pr checks` and
-`gh run view --log-failed`. Never mark such tests as skipped or disabled.
+Run `make lint test` before every push.
+
+Claude Code cloud sessions have **no Docker**: Testcontainers tests skip themselves there
+(`@Testcontainers(disabledWithoutDocker = true)`) and run in CI, where a skipped test fails the
+build. Push, then wait for CI with `bash scripts/gh-task.sh checks-wait <repo> <pr>` and read
+failures with `bash scripts/gh-task.sh failed-logs <repo> <pr>`. New Testcontainers tests use the
+same annotation; never skip or disable a test any other way.
+
+GitHub access in cloud sessions is **REST only** (GraphQL, and therefore `gh pr` / `gh issue`, is
+blocked by the session proxy). Use `scripts/gh-task.sh` for issues, labels, comments, PRs, checks
+and auto-merge, or `gh api repos/...` directly.
 
 ## Repository map
 
@@ -48,9 +56,9 @@ cart-service/        Redis cart, hot path at peak
 seed/                sample catalog for the demo
 infra/               docker-compose.yml (+ peak overlay), app.Dockerfile, mock payment, k6, Grafana
 plans/               roadmap.md and epics/ (approved by the owner)
-scripts/             next-task.sh, next-review.sh, next-plan.sh, heartbeat.sh, cloud-setup.sh
+scripts/             next-task.sh, next-review.sh, next-plan.sh, heartbeat.sh, gh-task.sh, cloud-setup.sh
                      (orchestration, no model calls; see docs/scheduled-tasks.md)
-.claude/             role prompts, settings and guard hooks for agent sessions
+.claude/             role prompts and settings for agent sessions
 .github/             CI, merge-gate, contract-publish workflows and policy scripts
 ```
 
@@ -118,7 +126,8 @@ Label the issue `blocked` when you cannot continue at all.
 
 ## Conventions
 
-- Branch: `issue-<number>-<short-slug>`. One issue per branch and PR. PR body has `Closes #<n>`.
+- Branch: `claude/issue-<number>-<short-slug>` (cloud sessions may push only `claude/` branches).
+  One issue per branch and PR. PR body has `Closes #<n>`.
 - Commits: Conventional Commits (`feat(cart): ...`, `fix(core): ...`, `test: ...`, `chore: ...`),
   small, one step each, pushed after each step.
 - Packages: `com.mayshop.<deployable>[.<module>]`. Constructor injection only. SLF4J logging.

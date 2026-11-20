@@ -31,6 +31,16 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Lint, compile, tests (Testcontainers), Modulith and ArchUnit
         run: make lint-java test build
+      - name: No skipped tests in CI
+        # Testcontainers tests skip themselves where Docker is missing (Claude Code cloud sessions);
+        # CI has Docker, so every test must run here.
+        run: |
+          skipped=$(grep -ho 'skipped="[0-9]*"' ./*/build/test-results/test/*.xml | grep -v 'skipped="0"' || true)
+          if [[ -n $skipped ]]; then
+            grep -l 'skipped="[1-9]' ./*/build/test-results/test/*.xml
+            echo "::error::Tests were skipped in CI; Docker is available here, so every test must run."
+            exit 1
+          fi
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -62,9 +72,9 @@ jobs:
           persist-credentials: false
       - name: ShellCheck
         run: >-
-          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 -S warning
-          scripts/*.sh scripts/tests/*.sh .claude/hooks/guard.sh .github/scripts/pr-policy.sh
-      - name: Picker and guard tests
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 -x -S warning
+          scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh .github/scripts/pr-policy.sh
+      - name: Picker tests
         run: make test-scripts
 
   gitleaks:
