@@ -44,6 +44,8 @@ export function checkSpec(doc, codes) {
         if (JSON_TYPE.test(type) && !hasExample(media)) errors.push(`${where}: JSON request body has no example`);
       }
 
+      // Only `health` operations may rely on a `default` problem response; all others need an explicit 4xx.
+      const allowsDefault = Array.isArray(op.tags) && op.tags.includes('health');
       let hasProblemResponse = false;
       for (const [status, rawResp] of Object.entries(op.responses ?? {})) {
         const resp = deref(doc, rawResp);
@@ -53,8 +55,7 @@ export function checkSpec(doc, codes) {
             if (JSON_TYPE.test(type) && !hasExample(media)) errors.push(`${where}: ${status} JSON response has no example`);
           }
         }
-        // `default` counts as the problem response when no explicit 4xx exists.
-        if (/^4/.test(status) || status === 'default') {
+        if (/^4/.test(status) || (allowsDefault && status === 'default')) {
           const media = content[PROBLEM_TYPE];
           if (usesProblem(media)) {
             hasProblemResponse = true;
@@ -64,7 +65,7 @@ export function checkSpec(doc, codes) {
           }
         }
       }
-      if (!hasProblemResponse) errors.push(`${where}: no 4xx (or default) response using application/problem+json with Problem`);
+      if (!hasProblemResponse) errors.push(`${where}: no explicit 4xx response using application/problem+json with Problem (only health operations may use default)`);
     }
   }
   return errors;

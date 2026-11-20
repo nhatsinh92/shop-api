@@ -34,12 +34,23 @@ test('a spec that follows every convention passes', () => {
   assert.deepEqual(checkSpec(good(), codes), []);
 });
 
-test('a default response that uses Problem satisfies the problem-response rule', () => {
+const defaultOnly = (tags) => {
   const doc = good();
   delete op(doc).responses[404];
+  op(doc).tags = tags;
   op(doc).responses.default = { $ref: '#/components/responses/Err' };
   doc.components = { responses: { Err: problem('INTERNAL_ERROR') } };
-  assert.deepEqual(checkSpec(doc, codes), []);
+  return doc;
+};
+
+test('a health operation with only a default problem response passes', () => {
+  assert.deepEqual(checkSpec(defaultOnly(['health']), codes), []);
+});
+
+test('a non-health operation with only a default problem response fails', () => {
+  const errors = checkSpec(defaultOnly(['things']), codes);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /POST \/things: no explicit 4xx/);
 });
 
 const bad = {

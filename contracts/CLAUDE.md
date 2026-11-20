@@ -38,7 +38,7 @@ Services implement them; `shop-web` generates its types and mocks from the relea
 - Add every new error code to `x-error-codes` in `errors.yaml` (status and meaning) in the task that
   introduces it. `Problem.code` stays a pattern-constrained string, never an enum.
 - Protected operations list `cookieAuth` and `bearerAuth` as two alternative requirement objects;
-  public ones set `security: []`. Specs default to both schemes.
+  public ones set `security: []`. Specs default to both schemes (secure by default), so every public operation must opt out explicitly with `security: []`.
 - `make lint-contract` runs the convention check: every operation needs an `operationId`, a tag, an
-  example on JSON request bodies and 2xx JSON responses, and a 4xx (or `default`) response using
+  example on JSON request bodies and 2xx JSON responses, and an explicit 4xx response (only `health` operations may use `default` instead) using
   `application/problem+json` with `Problem`, whose examples use catalogued codes.
