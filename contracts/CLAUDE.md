@@ -23,6 +23,12 @@ Services implement them; `shop-web` generates its types and mocks from the relea
 - Additive changes are a minor bump; breaking changes (removed or renamed fields, operations or
   enum values, new required request fields, changed types) are a major bump.
 - A **major bump is a sensitive change**: `merge-gate` requires the owner's `human-approved` label.
+- The `contract-breaking` CI job runs `oasdiff breaking` (pinned Docker image, `--fail-on ERR`) on
+  `core.yaml` and `cart.yaml` against the PR base and fails on a breaking change unless the major
+  version of `package.json` was bumped. A spec that is new on the head passes. The decision logic is
+  `scripts/check-breaking.sh`, tested by `scripts/check-breaking.test.sh` (fixtures in
+  `scripts/fixtures/breaking/`, run by `make test-scripts`). Run it locally with
+  `make contract-breaking BASE=<ref>` (default `origin/main`; needs Docker).
 - On `main`, the `contract-publish` workflow runs `npm pack` and creates the GitHub Release
   `contract-v<version>` with the tarball attached when that release does not exist yet.
   `shop-web` pins the tarball URL:
