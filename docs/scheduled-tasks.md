@@ -2,7 +2,7 @@
 
 The project is built by Claude Code cloud sessions that three scheduled tasks start. The owner
 creates them in the Claude app; this file holds their exact prompts and settings. GitHub Actions
-never calls a model: it runs CI, `merge-gate` and `contract-publish` only.
+never calls a model: it runs CI, `pr-policy` and `contract-publish` only.
 
 ## What the cloud environment provides (measured on 2026-11-20)
 
@@ -15,7 +15,7 @@ never calls a model: it runs CI, `merge-gate` and `contract-publish` only.
 | GitHub REST | Works through the proxy; `gh auth status` still reports an invalid token, which can be ignored | |
 | Auto-merge, ready for review | Only through the proxy routes `PUT /repos/{o}/{r}/pulls/{n}/ccr/auto_merge` and `POST .../ccr/ready_for_review` | `gh-task.sh auto-merge` / `ready` |
 | Branches | Scheduled tasks push only `claude/`-prefixed branches | Task branches are `claude/issue-<n>-<slug>`, planning branches `claude/plans-phase-<n>` |
-| Repository hooks | `.claude/settings.json` hooks are not loaded in multi-repository sessions | No guard hook; the gate is CI (`protected-paths`, `merge-gate`) |
+| Repository hooks | `.claude/settings.json` hooks are not loaded in multi-repository sessions | No guard hook; the gate is CI (`protected-paths`) |
 
 ## Cloud environment (shared by the three tasks)
 
@@ -47,12 +47,8 @@ read). `make lint test` must pass in both repositories (Testcontainers tests sho
 
 ### Identity
 
-`merge-gate` accepts `human-approved` only when the owner added it directly, not through a GitHub
-App (`performed_via_github_app` is empty). Labels that agent sessions add through the Claude GitHub
-proxy are expected to carry the app; confirm it the first time a reviewer run adds
-`agent-approved` (`gh api repos/<o>/<r>/issues/<pr>/events` shows `performed_via_github_app`). If
-it is empty, an agent could also satisfy the owner check, and the owner should stop and ask for a
-different approval mechanism before relying on `human-approved`.
+There is no approval gate: PRs auto-merge once the required checks are green. The `agent-approved`
+label only records a review.
 
 ## GitHub event triggers (faster turnaround)
 
@@ -109,7 +105,7 @@ You are shop-worker for the "Mây" shop project. The repositories are at /home/u
 2. If it prints {"action":"none",...} or {"action":"error",...}: reply with its reason in one line and end the session now. Do nothing else.
 3. Otherwise read /home/user/shop-api/.claude/prompts/worker.md (and triage.md for "triage") and follow it exactly for that JSON. Read the CLAUDE.md of the repository you work in before changing anything.
 4. GitHub access is REST only: use /home/user/shop-api/scripts/gh-task.sh, never gh pr or gh issue. Branches must start with claude/.
-5. Everything you write to GitHub and the repositories is in English. Never force push, push to main, delete branches, change repository settings, or add human-approved, approved or infra-change. When the issue is unclear, stop and comment instead of guessing.
+5. Everything you write to GitHub and the repositories is in English. Never force push, push to main, delete branches, change repository settings, or add approved or infra-change. When the issue is unclear, stop and comment instead of guessing.
 6. Finish with a short summary: issue, branch, PR, check status, and anything the owner must do.
 ```
 
@@ -131,7 +127,7 @@ You are shop-reviewer for the "Mây" shop project. The repositories are at /home
 2. If it prints {"action":"none",...} or {"action":"error",...}: reply with its reason in one line and end the session now. Do nothing else.
 3. Otherwise read /home/user/shop-api/.claude/prompts/reviewer.md and follow it exactly for that PR, including every checklist item.
 4. GitHub access is REST only: use /home/user/shop-api/scripts/gh-task.sh, never gh pr or gh issue.
-5. Everything you write is in English. Never push commits to the PR branch and never add human-approved.
+5. Everything you write is in English. Never push commits to the PR branch.
 6. Finish with a one-line verdict and what the owner must do, if anything.
 ```
 
@@ -177,7 +173,7 @@ You are shop-planner for the "Mây" shop project. The repositories are at /home/
 2. If it prints {"action":"none",...} or {"action":"error",...}: reply with its reason in one line and end the session now. Do nothing else.
 3. Otherwise read /home/user/shop-api/.claude/prompts/planner.md and follow it exactly for that JSON. Sources of truth: docs/handoff/shop-build-plan.md, docs/handoff/technical-notes.md, plans/roadmap.md and plans/epics/ in each repository, and design/ in shop-web. Do not change decisions made there.
 4. GitHub access is REST only: use /home/user/shop-api/scripts/gh-task.sh, never gh pr or gh issue. Branches must start with claude/.
-5. Everything you write is in English. Never label anything approved or human-approved; the owner approves epics.
+5. Everything you write is in English. Never label anything approved; the owner approves epics.
 6. Finish with a summary of what you created and what the owner must review.
 ```
 
@@ -187,4 +183,4 @@ You are shop-planner for the "Mây" shop project. The repositories are at /home/
 | --- | --- | --- |
 | `scripts/next-task.sh`, `next-review.sh`, `next-plan.sh`, `gh-task.sh` | Cloud session | No (bash + gh REST) |
 | Implementation, review, planning | Cloud session | Yes |
-| `ci`, `e2e`, `merge-gate`, `contract-publish` | GitHub Actions with `GITHUB_TOKEN` | No |
+| `ci`, `e2e`, `pr-policy`, `contract-publish` | GitHub Actions with `GITHUB_TOKEN` | No |

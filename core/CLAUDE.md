@@ -24,8 +24,8 @@ Rules:
   tables between modules; each module owns its own tables.
 - `ModularityTests` (Spring Modulith `verify()`) and `ArchitectureTest` (ArchUnit) must stay green.
   Add new architecture rules as new tests; never relax existing ones.
-- `auth` is a **sensitive path**: PRs touching `core/src/main/java/com/mayshop/core/auth/**` need
-  the owner's `human-approved` label.
+- `auth` is a **sensitive path**: change `core/src/main/java/com/mayshop/core/auth/**` only when
+  the issue's scope names it.
 
 ## Commands
 

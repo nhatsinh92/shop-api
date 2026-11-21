@@ -59,7 +59,7 @@ plans/               roadmap.md and epics/ (approved by the owner)
 scripts/             next-task.sh, next-review.sh, next-plan.sh, heartbeat.sh, gh-task.sh, cloud-setup.sh
                      (orchestration, no model calls; see docs/scheduled-tasks.md)
 .claude/             role prompts and settings for agent sessions
-.github/             CI, merge-gate, contract-publish workflows and policy scripts
+.github/             CI, pr-policy, contract-publish workflows and policy scripts
 ```
 
 ## Boundaries
@@ -81,16 +81,17 @@ Each issue's **Scope** section is binding: change only paths under "May change".
 rejects PRs that leave the scope.
 
 Protected paths. A PR that touches them fails the `protected-paths` check unless the issue and PR
-carry `infra-change` (added only by the owner or the planner), and `merge-gate` also requires the
-owner's `human-approved` label:
+carry `infra-change` (added only by the owner or the planner):
 
 - `.github/**`, `.claude/**`
 - Lint and coverage config: root `build.gradle.kts`, `config/**`, `redocly.yaml`,
   `.redocly.lint-ignore.yaml`, `gradle.properties`, `gradle/wrapper/**`
 - Existing test files (`**/src/test/**` that already exist on `main`): add new tests, never edit,
   weaken or delete existing ones in a feature task
-- Sensitive code: `gateway/**`, `core/src/main/java/com/mayshop/core/auth/**`, any `*Security*`
-  class or `security/` package, and contract major version bumps
+
+Sensitive code (`gateway/**`, `core/src/main/java/com/mayshop/core/auth/**`, any `*Security*` class
+or `security/` package, contract major version bumps) has no extra CI gate: PRs auto-merge once CI
+is green. Change it only when the issue's scope names it.
 
 Never add `@Disabled`, `@SuppressWarnings`, `// CHECKSTYLE:OFF`, `spotless:off` or lint ignore
 entries to make a check pass. Fix the code. Never change tests or fixtures so that they pass; if a

@@ -26,6 +26,7 @@ Java 21, Spring Boot 4.0 (see "Deviations"), Gradle.
 | --- | --- | --- | --- |
 | Spring Boot | Spring Boot 3 | Spring Boot 4.0.10, Spring Cloud 2025.1.5, Spring Modulith 2.0.10 | Boot 3.5 open-source support ended on 2026-06-30. 4.0 is the line Spring Cloud 2025.1 targets; its OSS support ends 2026-12-31, so an upgrade to Boot 4.2 / Spring Cloud 2026.0 is planned as an infra task once 2026.0 has a patch release. |
 | Contract package | npm package on GitHub Packages | GitHub Release tarball `contract-v<version>` with `shop-api-contract-<version>.tgz`, pinned by URL in shop-web | GitHub Packages requires the scope to match the owner (`@nhatsinh92`) and a token even for public packages; the release tarball keeps the name, is public and needs only `GITHUB_TOKEN`. Approved by the owner. |
+| Merge approval | `merge-gate` required `agent-approved`, plus the owner's `human-approved` for sensitive paths | No approval gate: PRs auto-merge on green CI; `protected-paths` and `infra-change` stay | Owner decision on 2026-11-21. |
 
 ## Housekeeping tasks (infra, not tied to a phase)
 

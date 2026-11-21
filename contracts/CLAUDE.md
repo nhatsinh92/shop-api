@@ -22,7 +22,7 @@ Services implement them; `shop-web` generates its types and mocks from the relea
   (`node contracts/scripts/check-version.mjs` enforces it).
 - Additive changes are a minor bump; breaking changes (removed or renamed fields, operations or
   enum values, new required request fields, changed types) are a major bump.
-- A **major bump is a sensitive change**: `merge-gate` requires the owner's `human-approved` label.
+- A **major bump is a sensitive change**: make it only when the issue asks for it.
 - On `main`, the `contract-publish` workflow runs `npm pack` and creates the GitHub Release
   `contract-v<version>` with the tarball attached when that release does not exist yet.
   `shop-web` pins the tarball URL:
