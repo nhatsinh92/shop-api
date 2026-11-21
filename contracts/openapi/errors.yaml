@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 0.4.0
+  version: 0.5.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -42,6 +42,10 @@ x-error-codes:
     status: 404
     description: >-
       No product exists for the given slug or SKU.
+  FLASH_SALE_NONE:
+    status: 404
+    description: >-
+      No flash sale is running now.
   PAGINATION_CURSOR_INVALID:
     status: 400
     description: >-

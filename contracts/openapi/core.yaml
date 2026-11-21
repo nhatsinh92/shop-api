@@ -1,9 +1,9 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.4.0
+  version: 0.5.0
   description: >-
-    Auth, product, order and checkout. Phase 1 pre-release: health, auth and the product catalog are specified so far.
+    Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price and recommendations are specified so far.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -25,7 +25,10 @@ tags:
   - name: products
     description: >-
       Public product catalog: list, detail and a short-cache availability read. Responses carry
-      `Cache-Control` and the `x-cache-tags` the frontend uses to revalidate.
+      `Cache-Control` and the `x-cache-tags` the frontend uses to revalidate. Also the member price
+      and recommendations, which are user-aware and never cached by shared caches.
+  - name: flash-sale
+    description: The cached flash sale list shown on the home page.
 paths:
   /actuator/health:
     get:
@@ -465,6 +468,199 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/flash-sales/current:
+    get:
+      operationId: getCurrentFlashSale
+      summary: Get the flash sale that is running now
+      description: >-
+        Public and cached for a few minutes, so the home page reads it from the shared cache. Each
+        item is a product card plus the sale price and how much of the sale stock is gone.
+      tags: [flash-sale]
+      security: []
+      responses:
+        '200':
+          description: The running flash sale.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/FlashSaleCacheControl'
+            x-cache-tags:
+              $ref: '#/components/headers/FlashSaleCacheTags'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlashSale'
+              examples:
+                default:
+                  value:
+                    id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                    startsAt: '2026-12-12T00:00:00Z'
+                    endsAt: '2026-12-12T02:00:00Z'
+                    items:
+                      - sku: SKU-ANC-PRO-BLK
+                        slug: tai-nghe-anc-pro
+                        name: Tai nghe ANC Pro
+                        imageUrl: https://cdn.example.com/products/tai-nghe-anc-pro/1.jpg
+                        price:
+                          amount: 845500
+                          currency: VND
+                        listPrice:
+                          amount: 1790000
+                          currency: VND
+                        badges: [DISCOUNT]
+                        salePrice:
+                          amount: 645500
+                          currency: VND
+                        soldPercent: 62
+        '404':
+          description: No flash sale is running now.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: No flash sale is running
+                    status: 404
+                    code: FLASH_SALE_NONE
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/products/{slug}/member-price:
+    get:
+      operationId: getMemberPrice
+      summary: Get the signed-in member's price for a product
+      description: >-
+        User-specific, so it is never cached by shared caches. The product page streams it in after
+        the cached shell. The price depends on the member's tier.
+      tags: [products]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Slug'
+      responses:
+        '200':
+          description: The member price.
+          headers:
+            Cache-Control:
+              description: Member prices are private to the user and never stored.
+              schema:
+                type: string
+              example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPrice'
+              examples:
+                default:
+                  value:
+                    sku: SKU-ANC-PRO-BLK
+                    memberTier: GOLD
+                    price:
+                      amount: 804000
+                      currency: VND
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '404':
+          description: No product has this slug.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Product not found
+                    status: 404
+                    code: PRODUCT_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/recommendations:
+    get:
+      operationId: listRecommendations
+      summary: List recommended products
+      description: >-
+        Authentication is optional. The response shape is the same whether the results are
+        personalised for the signed-in user or a static list of products related to `productSlug`,
+        so clients do not depend on how they were chosen. The home and product pages stream it in
+        after the cached shell.
+      tags: [products]
+      security:
+        - {}
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: productSlug
+          in: query
+          required: false
+          description: Product the recommendations relate to, for example on a product page.
+          schema:
+            $ref: './errors.yaml#/components/schemas/Slug'
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 8
+      responses:
+        '200':
+          description: Recommended products.
+          headers:
+            Cache-Control:
+              description: May depend on the signed-in user, so shared caches must not store it.
+              schema:
+                type: string
+              example: private
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendations'
+              examples:
+                default:
+                  value:
+                    items:
+                      - sku: SKU-ANC-PRO-BLK
+                        slug: tai-nghe-anc-pro
+                        name: Tai nghe ANC Pro
+                        imageUrl: https://cdn.example.com/products/tai-nghe-anc-pro/1.jpg
+                        price:
+                          amount: 845500
+                          currency: VND
+                        listPrice:
+                          amount: 1790000
+                          currency: VND
+                        badges: [DISCOUNT]
+        '400':
+          description: '`limit` or `productSlug` is invalid.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Validation failed
+                    status: 400
+                    code: VALIDATION_FAILED
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+                    errors:
+                      - field: limit
+                        code: VALIDATION_FAILED
+                        message: must be between 1 and 20
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     cookieAuth:
@@ -509,6 +705,19 @@ components:
       schema:
         type: string
       example: product-3fa85f64-5717-4562-b3fc-2c963f66afa6
+    FlashSaleCacheControl:
+      description: >-
+        Shared caches may keep the flash sale for a few minutes; it is revalidated by tag when the
+        sale changes.
+      schema:
+        type: string
+      example: public, max-age=60, stale-while-revalidate=120
+    FlashSaleCacheTags:
+      description: Space-separated cache tags the frontend revalidates by. The flash sale carries `flash-sale`.
+      schema:
+        type: string
+      example: flash-sale
+      x-cache-tags: [flash-sale]
     SetSessionCookies:
       description: >-
         Three `Set-Cookie` headers: `access_token` and `refresh_token` (both httpOnly, Secure,
@@ -643,6 +852,57 @@ components:
           items:
             type: string
             pattern: '^[A-Z][A-Z0-9_]*$'
+    FlashSaleItem:
+      description: A product card in the flash sale, with its sale price and progress.
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          required: [salePrice, soldPercent]
+          properties:
+            salePrice:
+              $ref: './errors.yaml#/components/schemas/Money'
+            soldPercent:
+              type: integer
+              description: Share of the sale stock already sold, in percent.
+              minimum: 0
+              maximum: 100
+    FlashSale:
+      type: object
+      required: [id, startsAt, endsAt, items]
+      properties:
+        id:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+          description: The countdown on the home page runs to this instant.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlashSaleItem'
+    MemberPrice:
+      type: object
+      required: [sku, memberTier, price]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        memberTier:
+          type: string
+          description: Loyalty tier the price was computed for.
+          enum: [STANDARD, SILVER, GOLD, PLATINUM]
+        price:
+          $ref: './errors.yaml#/components/schemas/Money'
+    Recommendations:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductSummary'
     ProductPage:
       type: object
       required: [items, nextCursor]
