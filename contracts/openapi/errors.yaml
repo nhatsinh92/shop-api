@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 0.5.0
+  version: 0.6.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -51,6 +51,19 @@ x-error-codes:
     description: >-
       The `cursor` query parameter is not a cursor this API issued, or it has expired; restart from
       the first page.
+  CART_ITEM_NOT_FOUND:
+    status: 404
+    description: >-
+      The SKU is not in the cart (PATCH or DELETE of a missing item).
+  CART_OUT_OF_STOCK:
+    status: 409
+    description: >-
+      The SKU does not have enough stock for the requested quantity.
+  CART_QTY_LIMIT:
+    status: 422
+    description: >-
+      The quantity would exceed the per-SKU limit. The limit is in the problem `detail` and in the
+      `limit` extension field.
   CONFLICT:
     status: 409
     description: >-

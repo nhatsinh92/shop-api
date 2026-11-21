@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.5.0
+  version: 0.6.0
   description: >-
     Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price and recommendations are specified so far.
   license:
