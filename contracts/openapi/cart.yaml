@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 0.5.0
+  version: 0.6.0
   description: Cart service. Phase 0 exposes health only; the real contract is Phase 1.
   license:
     name: UNLICENSED
