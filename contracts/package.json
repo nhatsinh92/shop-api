@@ -1,6 +1,6 @@
 {
   "name": "@shop/api-contract",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OpenAPI contract for the shop-api services (source of truth for shop-web).",
   "license": "UNLICENSED",
   "repository": {
