@@ -10,7 +10,7 @@ REDOCLY := npx --yes @redocly/cli@2.82.0
 COMPOSE := docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract build demo demo-peak demo-down seed lock test-scripts
+.PHONY: help test lint lint-java lint-contract build demo demo-peak demo-down seed lock test-scripts contract-breaking
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -60,3 +60,12 @@ lock: ## Refresh gradle.lockfile after changing dependencies
 test-scripts: ## Tests for the orchestration scripts (needs jq)
 	bash scripts/tests/picker.test.sh
 	bash scripts/tests/claim.test.sh
+	bash contracts/scripts/check-breaking.test.sh
+
+BASE ?= origin/main
+
+contract-breaking: ## Breaking-change check of the specs against BASE (default origin/main; needs Docker)
+	rm -rf build/contract-base
+	mkdir -p build/contract-base
+	git archive "$(BASE)" contracts | tar -x -C build/contract-base
+	bash contracts/scripts/check-breaking.sh build/contract-base/contracts contracts

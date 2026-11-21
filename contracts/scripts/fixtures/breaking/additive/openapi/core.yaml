@@ -1,0 +1,29 @@
+openapi: 3.1.1
+info:
+  title: Fixture core API
+  version: 1.0.0
+paths:
+  /products:
+    get:
+      operationId: listProducts
+      responses:
+        '200':
+          description: Products.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sku, name]
+                properties:
+                  name:
+                    type: string
+                  sku:
+                    $ref: errors.yaml#/components/schemas/Sku
+                  title:
+                    type: string
+  /categories:
+    get:
+      operationId: listCategories
+      responses:
+        '200':
+          description: Categories.

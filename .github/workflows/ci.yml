@@ -62,6 +62,24 @@ jobs:
           node-version: "22"
       - run: make lint-contract
 
+  contract-breaking:
+    name: contract-breaking
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Compare the specs with the PR base (oasdiff breaking, major bump required)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: make contract-breaking BASE="$BASE_SHA"
+
   scripts:
     name: scripts
     runs-on: ubuntu-latest
@@ -74,6 +92,7 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 -x -S warning
           scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh .github/scripts/pr-policy.sh
+          contracts/scripts/*.sh
       - name: Picker tests
         run: make test-scripts
 

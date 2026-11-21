@@ -1,0 +1,11 @@
+openapi: 3.1.1
+info:
+  title: Fixture cart API
+  version: 1.0.0
+paths:
+  /cart:
+    get:
+      operationId: getCart
+      responses:
+        '200':
+          description: The cart.
