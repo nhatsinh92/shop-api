@@ -1,9 +1,9 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.3.0
+  version: 0.4.0
   description: >-
-    Auth, product, order and checkout. Phase 1 pre-release: health and auth are specified so far.
+    Auth, product, order and checkout. Phase 1 pre-release: health, auth and the product catalog are specified so far.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -22,6 +22,10 @@ tags:
     description: >-
       Login, token refresh, logout, current user and the JWKS the gateway uses to verify access
       tokens. Tokens travel only in httpOnly cookies, never in a request or response body.
+  - name: products
+    description: >-
+      Public product catalog: list, detail and a short-cache availability read. Responses carry
+      `Cache-Control` and the `x-cache-tags` the frontend uses to revalidate.
 paths:
   /actuator/health:
     get:
@@ -236,6 +240,231 @@ paths:
           $ref: './errors.yaml#/components/responses/NotFound'
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/products:
+    get:
+      operationId: listProducts
+      summary: List products
+      description: >-
+        Public, cursor-paginated catalog, optionally filtered by category. Items are ordered by the
+        server (newest first) and the order is stable across pages.
+      tags: [products]
+      security: []
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Category slug. Omit to list every category.
+          schema:
+            $ref: '#/components/schemas/CategorySlug'
+        - $ref: './errors.yaml#/components/parameters/Cursor'
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: One page of products.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CatalogCacheControl'
+            x-cache-tags:
+              $ref: '#/components/headers/ListCacheTags'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+              examples:
+                default:
+                  value:
+                    items:
+                      - sku: SKU-ANC-PRO-BLK
+                        slug: tai-nghe-anc-pro
+                        name: Tai nghe ANC Pro
+                        imageUrl: https://cdn.example.com/products/tai-nghe-anc-pro/1.jpg
+                        price:
+                          amount: 845500
+                          currency: VND
+                        listPrice:
+                          amount: 1790000
+                          currency: VND
+                        badges: [DISCOUNT]
+                    nextCursor: eyJpZCI6MTIzfQ
+        '400':
+          description: '`limit` or `category` is invalid, or the cursor cannot be read.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                invalidLimit:
+                  value:
+                    type: about:blank
+                    title: Validation failed
+                    status: 400
+                    code: VALIDATION_FAILED
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+                    errors:
+                      - field: limit
+                        code: VALIDATION_FAILED
+                        message: must be between 1 and 50
+                invalidCursor:
+                  value:
+                    type: about:blank
+                    title: Invalid cursor
+                    status: 400
+                    code: PAGINATION_CURSOR_INVALID
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/products/{slug}:
+    get:
+      operationId: getProduct
+      summary: Get a product by slug
+      description: >-
+        Public product detail with its variants (colour and size options), as shown on the product
+        page.
+      tags: [products]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Slug'
+      responses:
+        '200':
+          description: The product.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CatalogCacheControl'
+            x-cache-tags:
+              $ref: '#/components/headers/ProductCacheTags'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+              examples:
+                default:
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    sku: SKU-ANC-PRO-BLK
+                    slug: tai-nghe-anc-pro
+                    name: Tai nghe ANC Pro
+                    brand: Mây Audio
+                    imageUrl: https://cdn.example.com/products/tai-nghe-anc-pro/1.jpg
+                    price:
+                      amount: 845500
+                      currency: VND
+                    listPrice:
+                      amount: 1790000
+                      currency: VND
+                    badges: [DISCOUNT]
+                    description: Chống ồn chủ động đa tầng, thời lượng pin đến 40 giờ.
+                    images:
+                      - url: https://cdn.example.com/products/tai-nghe-anc-pro/1.jpg
+                        alt: Tai nghe ANC Pro màu đen
+                      - url: https://cdn.example.com/products/tai-nghe-anc-pro/2.jpg
+                        alt: Tai nghe ANC Pro nhìn nghiêng
+                    category:
+                      slug: am-thanh
+                      name: Âm thanh
+                      path:
+                        - slug: dien-tu
+                          name: Điện tử
+                        - slug: am-thanh
+                          name: Âm thanh
+                    variants:
+                      - sku: SKU-ANC-PRO-BLK
+                        options:
+                          - name: color
+                            value: Đen
+                        price:
+                          amount: 845500
+                          currency: VND
+                      - sku: SKU-ANC-PRO-WHT
+                        options:
+                          - name: color
+                            value: Trắng
+                        price:
+                          amount: 845500
+                          currency: VND
+        '404':
+          description: No product has this slug.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Product not found
+                    status: 404
+                    code: PRODUCT_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/products/{sku}/availability:
+    get:
+      operationId: getProductAvailability
+      summary: Get the current price and approximate stock of a SKU
+      description: >-
+        Public and cached for only a few seconds, so a burst of traffic at peak produces one
+        backend call. Stock is approximate on purpose; the authoritative check happens when stock
+        is reserved at checkout.
+      tags: [products]
+      security: []
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Sku'
+      responses:
+        '200':
+          description: Price and approximate stock level.
+          headers:
+            Cache-Control:
+              description: Shared caches may keep the answer for a few seconds and serve it stale briefly.
+              schema:
+                type: string
+              example: public, max-age=5, stale-while-revalidate=10
+            x-cache-tags:
+              $ref: '#/components/headers/ProductCacheTags'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+              examples:
+                low:
+                  value:
+                    sku: SKU-ANC-PRO-BLK
+                    price:
+                      amount: 845500
+                      currency: VND
+                    stockLevel: LOW
+                    approxQuantity: 40
+        '404':
+          description: No product has this SKU.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Product not found
+                    status: 404
+                    code: PRODUCT_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     cookieAuth:
@@ -261,6 +490,25 @@ components:
         The httpOnly `refresh_token` cookie set by login and refresh. It is accepted only by
         `POST /api/auth/refresh`.
   headers:
+    CatalogCacheControl:
+      description: >-
+        Shared caches may keep the response for a few minutes and serve it stale while they
+        revalidate.
+      schema:
+        type: string
+      example: public, max-age=120, stale-while-revalidate=600
+    ListCacheTags:
+      description: Space-separated cache tags the frontend revalidates by. The list carries `products`.
+      schema:
+        type: string
+      example: products
+    ProductCacheTags:
+      description: >-
+        Space-separated cache tags the frontend revalidates by. Detail and availability carry
+        `product-{id}`, where `{id}` is the product's `id`.
+      schema:
+        type: string
+      example: product-3fa85f64-5717-4562-b3fc-2c963f66afa6
     SetSessionCookies:
       description: >-
         Three `Set-Cookie` headers: `access_token` and `refresh_token` (both httpOnly, Secure,
@@ -344,6 +592,141 @@ components:
         e:
           type: string
           description: Base64url-encoded public exponent.
+    CategorySlug:
+      type: string
+      description: URL-friendly category identifier.
+      examples: [am-thanh]
+    CategoryRef:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:
+          $ref: '#/components/schemas/CategorySlug'
+        name:
+          type: string
+    Category:
+      description: A category with its path from the root, for the breadcrumb.
+      allOf:
+        - $ref: '#/components/schemas/CategoryRef'
+        - type: object
+          required: [path]
+          properties:
+            path:
+              type: array
+              description: Ancestors from the root down to and including this category.
+              items:
+                $ref: '#/components/schemas/CategoryRef'
+    ProductSummary:
+      type: object
+      description: The product card shown in lists. Other specs reuse this component.
+      required: [sku, slug, name, imageUrl, price]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        slug:
+          $ref: './errors.yaml#/components/schemas/Slug'
+        name:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        price:
+          $ref: './errors.yaml#/components/schemas/Money'
+        listPrice:
+          description: Price before the discount; present only when it is higher than `price`.
+          $ref: './errors.yaml#/components/schemas/Money'
+        badges:
+          type: array
+          description: >-
+            Labels such as `DISCOUNT`. Clients ignore values they do not know, so new badges are
+            not breaking.
+          items:
+            type: string
+            pattern: '^[A-Z][A-Z0-9_]*$'
+    ProductPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductSummary'
+        nextCursor:
+          type: [string, 'null']
+          description: Cursor for the next page, or null on the last page.
+    ProductImage:
+      type: object
+      required: [url, alt]
+      properties:
+        url:
+          type: string
+          format: uri
+        alt:
+          type: string
+    ProductOption:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+          description: Option name such as `color` or `size`.
+        value:
+          type: string
+          description: Display value in Vietnamese, for example `Đen`.
+    ProductVariant:
+      type: object
+      required: [sku, options, price]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductOption'
+        price:
+          $ref: './errors.yaml#/components/schemas/Money'
+    ProductDetail:
+      description: A product with everything the product page shows.
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          required: [id, brand, description, images, category, variants]
+          properties:
+            id:
+              description: Product id used in cache tags (`product-{id}`).
+              $ref: './errors.yaml#/components/schemas/Uuid'
+            brand:
+              type: string
+            description:
+              type: string
+            images:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProductImage'
+            category:
+              $ref: '#/components/schemas/Category'
+            variants:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/ProductVariant'
+    StockLevel:
+      type: string
+      enum: [IN_STOCK, LOW, OUT_OF_STOCK]
+    Availability:
+      type: object
+      required: [sku, price, stockLevel]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        price:
+          $ref: './errors.yaml#/components/schemas/Money'
+        stockLevel:
+          $ref: '#/components/schemas/StockLevel'
+        approxQuantity:
+          type: integer
+          minimum: 0
+          description: Approximate units left; shown only when stock is low.
     Health:
       type: object
       required: [status]
