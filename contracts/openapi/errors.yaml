@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -22,6 +22,14 @@ x-error-codes:
     status: 401
     description: >-
       No valid access token was presented.
+  AUTH_INVALID_CREDENTIALS:
+    status: 401
+    description: >-
+      The email or password is wrong.
+  AUTH_REFRESH_INVALID:
+    status: 401
+    description: >-
+      The refresh token is missing, expired or revoked; the user must log in again.
   AUTH_FORBIDDEN:
     status: 403
     description: >-

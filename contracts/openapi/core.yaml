@@ -1,8 +1,9 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.2.0
-  description: Auth, product, order and checkout. Phase 0 exposes health only; the real contract is Phase 1.
+  version: 0.3.0
+  description: >-
+    Auth, product, order and checkout. Phase 1 pre-release: health and auth are specified so far.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -17,6 +18,10 @@ security:
 tags:
   - name: health
     description: Liveness and readiness.
+  - name: auth
+    description: >-
+      Login, token refresh, logout, current user and the JWKS the gateway uses to verify access
+      tokens. Tokens travel only in httpOnly cookies, never in a request or response body.
 paths:
   /actuator/health:
     get:
@@ -47,6 +52,190 @@ paths:
                     status: DOWN
         default:
           $ref: './errors.yaml#/components/responses/InternalError'
+  /api/auth/login:
+    post:
+      operationId: login
+      summary: Log in with email and password
+      description: >-
+        Verifies the credentials and starts a session. The response sets three cookies through
+        `Set-Cookie`: `access_token` (httpOnly, Secure, SameSite=Lax, short lived, 5-15 minutes),
+        `refresh_token` (httpOnly, Secure, SameSite=Lax, long lived) and the hint cookie
+        `logged_in=1` (not httpOnly, so the browser can tell that a session exists). No token is
+        ever returned in the response body.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value:
+                  email: linh.nguyen@example.com
+                  password: correct-horse-battery-staple
+      responses:
+        '200':
+          description: Logged in. The tokens are in the `Set-Cookie` headers.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookies'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+              examples:
+                default:
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    email: linh.nguyen@example.com
+                    displayName: Linh Nguyen
+                    memberTier: GOLD
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          description: The email or password is wrong.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Invalid credentials
+                    status: 401
+                    code: AUTH_INVALID_CREDENTIALS
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/auth/refresh:
+    post:
+      operationId: refreshSession
+      summary: Rotate the access and refresh tokens
+      description: >-
+        Authenticates with the `refresh_token` cookie (security scheme `refreshCookieAuth`) and
+        sets new `access_token` and `refresh_token` cookies through `Set-Cookie`; the hint cookie
+        `logged_in=1` is renewed too. Tokens are returned only in `Set-Cookie`, never in the body;
+        server-side callers such as `proxy.ts` read the `Set-Cookie` headers.
+
+        Refresh tokens rotate with a grace period: the previous refresh token stays valid for a
+        few seconds after a rotation, so parallel tabs and parallel server-side refreshes that
+        present the same token all succeed. After the grace period the old token is rejected.
+
+        Missing, expired and revoked tokens all return 401 `AUTH_REFRESH_INVALID`.
+      tags: [auth]
+      security:
+        - refreshCookieAuth: []
+      responses:
+        '204':
+          description: Session refreshed. The new tokens are in the `Set-Cookie` headers.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetSessionCookies'
+        '401':
+          description: The refresh token is missing, expired or revoked.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Refresh token invalid
+                    status: 401
+                    code: AUTH_REFRESH_INVALID
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/auth/logout:
+    post:
+      operationId: logout
+      summary: Log out and clear the session cookies
+      description: >-
+        Ends the session. Succeeds without a valid access token, so an expired session can still
+        be cleared. The response clears `access_token`, `refresh_token` and `logged_in` by setting
+        each of them with `Max-Age=0`.
+      tags: [auth]
+      security: []
+      responses:
+        '204':
+          description: Logged out. All three cookies are cleared.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/ClearSessionCookies'
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Get the current user
+      tags: [auth]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The signed-in user.
+          headers:
+            Cache-Control:
+              description: User data is never cached by shared caches.
+              schema:
+                type: string
+              example: private, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+              examples:
+                default:
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    email: linh.nguyen@example.com
+                    displayName: Linh Nguyen
+                    memberTier: GOLD
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+  /.well-known/jwks.json:
+    get:
+      operationId: getJwks
+      summary: JSON Web Key Set for access-token verification
+      description: >-
+        Internal endpoint for the gateway, which verifies access tokens with these keys. The
+        gateway does not route it from `/api`, so browsers cannot reach it. Public: it holds only
+        public keys. During key rotation the set holds both the current and the previous key.
+      tags: [auth]
+      security: []
+      x-internal: true
+      responses:
+        '200':
+          description: The public signing keys.
+          headers:
+            Cache-Control:
+              description: The gateway may cache the key set for a few minutes.
+              schema:
+                type: string
+              example: public, max-age=300
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwkSet'
+              examples:
+                default:
+                  value:
+                    keys:
+                      - kty: RSA
+                        kid: 2026-11-key-1
+                        use: sig
+                        alg: RS256
+                        n: sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri23bOdgWp4Dy1WlUzewbgBHod5pcM9H95GQRV3JDXboIRROSBigeC5yjU1hGzHHyXss8UDprecbAYxknTcQkhslANGRUZmdTOQ5qTRsLAt6BTYuyvVRdhS8exSZEy_c4gs_7svlJJQ4H9_NxsiIoLwAEk7-Q3UXERGYw_75IDrGA84-lA_-Ct4eTlXHBIY2EaV7t7LjJaynVJCpkv4LKjTTAumiGUIuQhrNhZLuF_RJLqHpM2kgWFLU7-VTdL1VbC2tejvcI2BlMkEpk1BzBZI0KQB0GaDWFLN-aEAw3vRw
+                        e: AQAB
+        '404':
+          $ref: './errors.yaml#/components/responses/NotFound'
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     cookieAuth:
@@ -64,7 +253,97 @@ components:
         Used between the gateway and the services. The gateway reads the `access_token` cookie
         (cookieAuth) and forwards it as `Authorization: Bearer`. Protected operations list
         cookieAuth and bearerAuth as two alternative security requirement objects.
+    refreshCookieAuth:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: >-
+        The httpOnly `refresh_token` cookie set by login and refresh. It is accepted only by
+        `POST /api/auth/refresh`.
+  headers:
+    SetSessionCookies:
+      description: >-
+        Three `Set-Cookie` headers: `access_token` and `refresh_token` (both httpOnly, Secure,
+        SameSite=Lax, Path=/) and the hint cookie `logged_in=1` (not httpOnly, Secure,
+        SameSite=Lax, Path=/).
+      schema:
+        type: array
+        items:
+          type: string
+      example:
+        - access_token=eyJhbGciOi...; Max-Age=600; Path=/; HttpOnly; Secure; SameSite=Lax
+        - refresh_token=3f6c9d1e...; Max-Age=1209600; Path=/; HttpOnly; Secure; SameSite=Lax
+        - logged_in=1; Max-Age=1209600; Path=/; Secure; SameSite=Lax
+    ClearSessionCookies:
+      description: Three `Set-Cookie` headers that clear `access_token`, `refresh_token` and `logged_in`.
+      schema:
+        type: array
+        items:
+          type: string
+      example:
+        - access_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax
+        - refresh_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax
+        - logged_in=; Max-Age=0; Path=/; Secure; SameSite=Lax
   schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+    UserProfile:
+      type: object
+      required: [id, email, displayName, memberTier]
+      properties:
+        id:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        memberTier:
+          type: string
+          description: Loyalty tier of the member.
+          enum: [STANDARD, SILVER, GOLD, PLATINUM]
+    JwkSet:
+      type: object
+      description: JSON Web Key Set (RFC 7517) holding RSA public keys.
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/Jwk'
+    Jwk:
+      type: object
+      required: [kty, kid, use, alg, n, e]
+      properties:
+        kty:
+          type: string
+          const: RSA
+        kid:
+          type: string
+          description: Key id; matches the `kid` header of the access token.
+        use:
+          type: string
+          const: sig
+        alg:
+          type: string
+          const: RS256
+        n:
+          type: string
+          description: Base64url-encoded modulus.
+        e:
+          type: string
+          description: Base64url-encoded public exponent.
     Health:
       type: object
       required: [status]
