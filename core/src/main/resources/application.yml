@@ -49,3 +49,7 @@ auth:
     refresh-token-ttl: ${AUTH_REFRESH_TOKEN_TTL:14d}
     # Window in which a just-rotated refresh token is still accepted (parallel tabs, SSR).
     refresh-grace: ${AUTH_REFRESH_GRACE:10s}
+
+product:
+  # Shown as a card image for a product that has none.
+  placeholder-image-url: ${PRODUCT_PLACEHOLDER_IMAGE_URL:https://placehold.co/800x800?text=no-image}
