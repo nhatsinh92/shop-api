@@ -1224,18 +1224,22 @@ webhooks:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RevalidateRequest'
+              $ref: '#/components/schemas/ProductUpdated'
             examples:
               price:
                 value:
                   eventId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
                   occurredAt: '2026-12-12T00:00:05Z'
-                  tags: [products, flash-sale, product-3fa85f64-5717-4562-b3fc-2c963f66afa6]
+                  productId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  sku: SKU-ANC-PRO-BLK
+                  slug: tai-nghe-khong-day-chong-on-anc-pro
+                  changes: [PRICE]
+                  tags: [product-3fa85f64-5717-4562-b3fc-2c963f66afa6, products, flash-sale]
       responses:
         '204':
           description: The tags were revalidated.
         '400':
-          description: The body is not a valid revalidation request.
+          description: The body is not a valid `ProductUpdated` event.
           content:
             application/problem+json:
               schema:
@@ -1711,19 +1715,6 @@ components:
           slug: tai-nghe-khong-day-chong-on-anc-pro
           changes: [PRICE]
           tags: [product-3fa85f64-5717-4562-b3fc-2c963f66afa6, products, flash-sale]
-    RevalidateRequest:
-      type: object
-      description: >-
-        Body of the `productRevalidate` webhook: the `eventId`, `occurredAt` and `tags` of the
-        `ProductUpdated` event it was sent for.
-      required: [eventId, occurredAt, tags]
-      properties:
-        eventId:
-          $ref: '#/components/schemas/ProductUpdated/properties/eventId'
-        occurredAt:
-          $ref: '#/components/schemas/ProductUpdated/properties/occurredAt'
-        tags:
-          $ref: '#/components/schemas/ProductUpdated/properties/tags'
     UpdateProductRequest:
       type: object
       description: At least one property is required.
