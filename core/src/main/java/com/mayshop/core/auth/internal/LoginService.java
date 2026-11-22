@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class LoginService {
 
   private static final int REFRESH_TOKEN_BYTES = 32;
+  private static final SecureRandom RANDOM = new SecureRandom();
 
   private final UserAccounts users;
   private final SessionStore sessions;
@@ -27,7 +28,6 @@ public class LoginService {
   private final AccessTokenIssuer issuer;
   private final SessionProperties properties;
   private final Clock clock;
-  private final SecureRandom random = new SecureRandom();
   // Compared against when the email is unknown, so both failures cost one BCrypt comparison.
   private final String decoyHash;
 
@@ -74,9 +74,9 @@ public class LoginService {
         user, accessToken, issuer.ttl(), refreshToken, properties.refreshTokenTtl());
   }
 
-  private String newRefreshToken() {
+  static String newRefreshToken() {
     byte[] bytes = new byte[REFRESH_TOKEN_BYTES];
-    random.nextBytes(bytes);
+    RANDOM.nextBytes(bytes);
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
   }
 

@@ -27,6 +27,11 @@ class AuthExceptionHandler {
     return problem(HttpStatus.UNAUTHORIZED, "Unauthenticated", "AUTH_UNAUTHENTICATED");
   }
 
+  @ExceptionHandler(RefreshInvalidException.class)
+  ResponseEntity<Map<String, Object>> refreshInvalid() {
+    return problem(HttpStatus.UNAUTHORIZED, "Refresh token invalid", "AUTH_REFRESH_INVALID");
+  }
+
   private static ResponseEntity<Map<String, Object>> problem(
       HttpStatus status, String title, String code) {
     return ResponseEntity.status(status)

@@ -14,6 +14,11 @@ final class AccessTokenResolver implements BearerTokenResolver {
 
   @Override
   public String resolve(HttpServletRequest request) {
+    if (isSessionEndpoint(request)) {
+      // Login, refresh and logout authenticate by credentials or refresh cookie. A stale or
+      // invalid access token must not turn them into 401 AUTH_UNAUTHENTICATED.
+      return null;
+    }
     String header = request.getHeader(HttpHeaders.AUTHORIZATION);
     if (header != null && header.regionMatches(true, 0, PREFIX, 0, PREFIX.length())) {
       String token = header.substring(PREFIX.length()).strip();
@@ -28,5 +33,15 @@ final class AccessTokenResolver implements BearerTokenResolver {
       }
     }
     return null;
+  }
+
+  private static boolean isSessionEndpoint(HttpServletRequest request) {
+    if (!"POST".equals(request.getMethod())) {
+      return false;
+    }
+    String path = request.getRequestURI();
+    return "/api/auth/login".equals(path)
+        || "/api/auth/refresh".equals(path)
+        || "/api/auth/logout".equals(path);
   }
 }

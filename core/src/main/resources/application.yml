@@ -14,12 +14,23 @@ spring:
     schemas: auth
     default-schema: auth
     create-schemas: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Fail fast: refresh must keep working when Redis is down.
+      timeout: 500ms
+      connect-timeout: 500ms
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  health:
+    redis:
+      # Redis only holds grace-period keys; core stays ready without it.
+      enabled: false
   endpoint:
     health:
       probes:
@@ -34,3 +45,7 @@ auth:
     issuer: ${AUTH_JWT_ISSUER:mayshop-core}
     audience: ${AUTH_JWT_AUDIENCE:mayshop}
     access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:10m}
+  session:
+    refresh-token-ttl: ${AUTH_REFRESH_TOKEN_TTL:14d}
+    # Window in which a just-rotated refresh token is still accepted (parallel tabs, SSR).
+    refresh-grace: ${AUTH_REFRESH_GRACE:10s}
