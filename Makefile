@@ -10,7 +10,7 @@ REDOCLY := npx --yes @redocly/cli@2.82.0
 COMPOSE := docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract build demo demo-peak demo-down seed lock test-scripts contract-breaking
+.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down seed lock test-scripts contract-breaking
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -23,11 +23,17 @@ lint: lint-java lint-contract ## All static checks
 lint-java: ## Spotless (google-java-format), Checkstyle, compiler warnings as errors
 	$(GRADLE) spotlessCheck checkstyleMain checkstyleTest compileTestJava
 
-lint-contract: ## OpenAPI lint, contract version and convention checks
+lint-contract: bundle-contract ## OpenAPI lint, contract version, convention and bundle checks
 	node contracts/scripts/check-version.mjs
-	node --test contracts/scripts/check-conventions.test.mjs
+	node --test contracts/scripts/check-conventions.test.mjs contracts/scripts/check-bundle.test.mjs
 	node contracts/scripts/check-conventions.mjs
 	$(REDOCLY) lint
+
+bundle-contract: ## Bundle core and cart into single-file specs in contracts/dist and check them
+	mkdir -p contracts/dist
+	$(REDOCLY) bundle contracts/openapi/core.yaml -o contracts/dist/core.yaml
+	$(REDOCLY) bundle contracts/openapi/cart.yaml -o contracts/dist/cart.yaml
+	node contracts/scripts/check-bundle.mjs
 
 build: ## Build the three boot jars (no tests)
 	$(GRADLE) bootJar
