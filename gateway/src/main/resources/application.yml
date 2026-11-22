@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: ${GATEWAY_REDIS_TIMEOUT:200ms}
+      connect-timeout: ${GATEWAY_REDIS_CONNECT_TIMEOUT:200ms}
   cloud:
     gateway:
       server:
@@ -27,11 +33,22 @@ gateway:
     # core is down. Only /api/** is routed; /.well-known/** is never exposed.
     jwks-uri: ${CORE_URL:http://localhost:8081}/.well-known/jwks.json
 
+  rate-limit:
+    login-per-email-per-minute: ${GATEWAY_LOGIN_PER_EMAIL_PER_MINUTE:5}
+    login-per-ip-per-minute: ${GATEWAY_LOGIN_PER_IP_PER_MINUTE:60}
+    refresh-per-session-per-minute: ${GATEWAY_REFRESH_PER_SESSION_PER_MINUTE:10}
+    core-rate: ${GATEWAY_CORE_RATE:20}
+    core-burst: ${GATEWAY_CORE_BURST:40}
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  health:
+    # Rate limits fail open, so a Redis outage must not take the gateway out of rotation.
+    redis:
+      enabled: false
   endpoint:
     health:
       probes:

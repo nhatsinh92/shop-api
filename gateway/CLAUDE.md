@@ -30,6 +30,20 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
   and `traceId`.
 - Settings: `AUTH_JWT_ISSUER`, `AUTH_JWT_AUDIENCE` (same defaults as core) and `CORE_URL`.
 
+## Rate limits (`com.mayshop.gateway.ratelimit`)
+
+- `RateLimitFilter` (global filter, right after `AccessCookieFilter`): `POST /api/auth/login` is limited
+  per normalised email (`GATEWAY_LOGIN_PER_EMAIL_PER_MINUTE`, 5) and per client IP
+  (`GATEWAY_LOGIN_PER_IP_PER_MINUTE`, 60); `POST /api/auth/refresh` per SHA-256 of the `refresh_token`
+  cookie (`GATEWAY_REFRESH_PER_SESSION_PER_MINUTE`, 10), unlimited without the cookie; other `/api/**`
+  routes use a token bucket (`GATEWAY_CORE_RATE` 20/s, `GATEWAY_CORE_BURST` 40) keyed by the verified
+  `sub`, else the client IP. `/api/cart/**` is never limited.
+- Client IP is the connection's remote address; `X-Forwarded-For` is not trusted (Phase 6).
+- `RedisRateLimiter` runs Lua scripts (`resources/ratelimit/`). It **fails open** with a WARN when Redis
+  is unreachable; Redis health is excluded from `/actuator/health` for that reason.
+- Denials are 429 `RATE_LIMITED` problems with `Retry-After` (`ProblemResponses`). Settings:
+  `REDIS_HOST`, `REDIS_PORT`.
+
 ## Commands
 
 - `./gradlew :gateway:test`
