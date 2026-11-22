@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Cart service for signed-in users and guests. Signed-in users are identified by the access
     token; guests by the httpOnly cookie `guest_cart` (an opaque id), which the first write
@@ -158,6 +158,9 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '403':
+          $ref: './errors.yaml#/components/responses/Forbidden'
+          description: The gateway returns this when the `Origin` check fails.
         '404':
           description: Product not found
           content:
@@ -250,6 +253,9 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '403':
+          $ref: './errors.yaml#/components/responses/Forbidden'
+          description: The gateway returns this when the `Origin` check fails.
         '404':
           description: Cart item not found
           content:
@@ -328,6 +334,9 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '403':
+          $ref: './errors.yaml#/components/responses/Forbidden'
+          description: The gateway returns this when the `Origin` check fails.
         '404':
           description: Cart item not found
           content:
@@ -379,6 +388,9 @@ paths:
           $ref: './errors.yaml#/components/responses/BadRequest'
         '401':
           $ref: './errors.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './errors.yaml#/components/responses/Forbidden'
+          description: The gateway returns this when the `Origin` check fails.
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
 components:
