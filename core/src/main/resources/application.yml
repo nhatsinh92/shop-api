@@ -14,6 +14,20 @@ spring:
     schemas: auth
     default-schema: auth
     create-schemas: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      # Wait for the broker's acknowledgement; the registry resubmits what was not confirmed.
+      acks: all
+      properties:
+        spring.json.add.type.headers: false
+  modulith:
+    events:
+      jdbc:
+        # The event publication registry lives in its own schema (db/migration/modulith).
+        schema: modulith
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -51,6 +65,9 @@ auth:
     refresh-grace: ${AUTH_REFRESH_GRACE:10s}
 
 product:
+  internal:
+    # Shared secret of X-Internal-Token on /internal/**. Blank: the internal operations answer 404.
+    api-token: ${INTERNAL_API_TOKEN:}
   # Stock up to and including this many units is reported as LOW.
   low-stock-threshold: ${PRODUCT_LOW_STOCK_THRESHOLD:50}
   # Shown as a card image for a product that has none.

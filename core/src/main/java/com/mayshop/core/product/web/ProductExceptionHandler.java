@@ -1,5 +1,7 @@
 package com.mayshop.core.product.web;
 
+import com.mayshop.core.product.update.InvalidUpdateException;
+import com.mayshop.core.product.update.UnknownSkuException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +23,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
       AvailabilityController.class,
       FlashSaleController.class,
       MemberPriceController.class,
-      RecommendationController.class
+      RecommendationController.class,
+      InternalProductController.class
     })
 class ProductExceptionHandler {
 
@@ -72,6 +75,29 @@ class ProductExceptionHandler {
   ResponseEntity<Map<String, Object>> notFound() {
     return response(
         HttpStatus.NOT_FOUND, body(HttpStatus.NOT_FOUND, "Product not found", "PRODUCT_NOT_FOUND"));
+  }
+
+  @ExceptionHandler(UnknownSkuException.class)
+  ResponseEntity<Map<String, Object>> unknownSku() {
+    return notFound();
+  }
+
+  @ExceptionHandler(InvalidUpdateBodyException.class)
+  ResponseEntity<Map<String, Object>> invalidUpdateBody(InvalidUpdateBodyException e) {
+    Map<String, Object> body =
+        body(HttpStatus.BAD_REQUEST, "Validation failed", "VALIDATION_FAILED");
+    body.put(
+        "errors",
+        List.of(
+            Map.of("field", e.field(), "code", "VALIDATION_FAILED", "message", e.getMessage())));
+    return response(HttpStatus.BAD_REQUEST, body);
+  }
+
+  @ExceptionHandler(InvalidUpdateException.class)
+  ResponseEntity<Map<String, Object>> invalidUpdate() {
+    return response(
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        body(HttpStatus.UNPROCESSABLE_CONTENT, "Product update invalid", "PRODUCT_UPDATE_INVALID"));
   }
 
   @ExceptionHandler(FlashSaleNoneException.class)
