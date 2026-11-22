@@ -3,6 +3,6 @@
 # or on the host with PG* environment variables set. Idempotent: safe to run repeatedly.
 set -eu
 psql -v ON_ERROR_STOP=1 -q -f /seed/products.sql
-echo "seed: $(psql -tAc 'select count(*) from seed.product') products loaded"
+echo "seed: $(psql -tAc 'select count(*) from product.products') products loaded"
 psql -v ON_ERROR_STOP=1 -q -f /seed/users.sql
 echo "seed: $(psql -tAc 'select count(*) from auth.users') users loaded"

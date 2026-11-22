@@ -1,11 +1,13 @@
 # Seed data
 
-`seed.sh` loads `products.sql` (ten sample products from the design canvas) into the `seed`
-schema of the demo Postgres. `make demo` runs it once the database is healthy; `make seed`
-runs it again.
+`seed.sh` loads `products.sql` into the `product` schema (categories, ten products of the design
+canvas with their variants, images, stock and one flash sale) and then `users.sql` into
+`auth.users`. Both schemas are created by Flyway when `core` starts, so `core` must have started
+once first. `make demo` runs the seed once `core` is healthy; `make seed` runs it again.
+Loading is idempotent (upserts). The old `seed.product` table is dropped.
 
-`seed.sh` then loads `users.sql` into `auth.users`, which `core` creates with Flyway at startup, so
-`core` must have started once first. Loading is idempotent (`ON CONFLICT DO NOTHING`).
+The flash sale window is computed when the seed loads: it starts one hour ago and ends two hours
+later. Running `make demo` again reloads the seed and starts a new two-hour sale window.
 
 ## Demo users
 
