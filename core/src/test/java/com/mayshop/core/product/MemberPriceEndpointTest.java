@@ -141,7 +141,7 @@ class MemberPriceEndpointTest {
   }
 
   @Test
-  void aTokenSignedByAnotherKeyIsAnswered401() throws Exception {
+  void aMalformedTokenIsAnswered401() throws Exception {
     MockHttpServletResponse response = call("product-1", "not-a-token");
     assertThat(response.getStatus()).isEqualTo(401);
   }

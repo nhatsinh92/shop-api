@@ -1,4 +1,4 @@
-package com.mayshop.core;
+package com.mayshop.core.product;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
