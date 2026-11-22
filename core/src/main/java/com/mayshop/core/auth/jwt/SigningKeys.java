@@ -35,6 +35,18 @@ public final class SigningKeys {
     return kidOf(publicKey);
   }
 
+  /**
+   * Public keys that may verify a token: the current key and, during rotation, the previous one.
+   */
+  public List<RSAPublicKey> verificationKeys() {
+    List<RSAPublicKey> keys = new ArrayList<>();
+    keys.add(publicKey);
+    if (previousPublicKey != null) {
+      keys.add(previousPublicKey);
+    }
+    return keys;
+  }
+
   /** Public keys as JWK maps: the current key first, then the previous one when configured. */
   List<Map<String, String>> jwks() {
     List<Map<String, String>> keys = new ArrayList<>();
@@ -45,7 +57,8 @@ public final class SigningKeys {
     return keys;
   }
 
-  static String kidOf(RSAPublicKey key) {
+  /** The RFC 7638 thumbprint of a public key, used as its {@code kid}. */
+  public static String kidOf(RSAPublicKey key) {
     // RFC 7638 JWK thumbprint: SHA-256 over the required members in lexicographic order.
     String json =
         "{\"e\":\""
