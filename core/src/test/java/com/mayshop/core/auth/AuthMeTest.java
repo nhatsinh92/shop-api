@@ -166,15 +166,17 @@ class AuthMeTest {
   void publicOperationsAreReachableWithoutAToken() throws Exception {
     assertThat(me(get("/actuator/health")).getStatus()).isEqualTo(200);
     assertThat(me(get("/.well-known/jwks.json")).getStatus()).isEqualTo(200);
-    // Login is public (400 for the empty body, not 401). Refresh and logout have no handler yet
-    // (later tasks), so 404 proves security let them through.
+    // Login is public (400 for the empty body, not 401). Refresh answers 401 AUTH_REFRESH_INVALID
+    // without a refresh cookie (see AuthRefreshTest), not AUTH_UNAUTHENTICATED; logout has no
+    // handler yet (a later task), so 404 proves security let it through.
     assertThat(
             me(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .getStatus())
         .isEqualTo(400);
-    for (String path : new String[] {"/api/auth/refresh", "/api/auth/logout"}) {
-      assertThat(me(post(path)).getStatus()).as(path).isNotIn(401, 403);
-    }
+    MockHttpServletResponse refresh = me(post("/api/auth/refresh"));
+    assertThat(JSON.readTree(refresh.getContentAsString()).get("code").asString())
+        .isEqualTo("AUTH_REFRESH_INVALID");
+    assertThat(me(post("/api/auth/logout")).getStatus()).isNotIn(401, 403);
     for (String path :
         new String[] {
           "/api/products",

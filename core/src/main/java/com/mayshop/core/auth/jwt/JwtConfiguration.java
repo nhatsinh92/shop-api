@@ -9,6 +9,7 @@ import java.security.interfaces.RSAPublicKey;
 import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,8 +40,9 @@ class JwtConfiguration {
   }
 
   @Bean
-  AccessTokenIssuer accessTokenIssuer(SigningKeys keys, JwtProperties properties) {
-    return new AccessTokenIssuer(keys, properties, Clock.systemUTC());
+  AccessTokenIssuer accessTokenIssuer(
+      SigningKeys keys, JwtProperties properties, ObjectProvider<Clock> clock) {
+    return new AccessTokenIssuer(keys, properties, clock.getIfAvailable(Clock::systemUTC));
   }
 
   private static KeyPair generate() {
