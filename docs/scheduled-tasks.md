@@ -91,6 +91,16 @@ reviewer is already on. Workers add `review` only after CI is green, so a review
 label finds green checks. Each run costs some quota even when it ends at once, and GitHub events
 above the per-task hourly cap are dropped (the hourly schedule then catches up).
 
+Two rules keep event runs from being wasted:
+
+- Every worker and reviewer run ends with a `done` heartbeat (`heartbeat.sh ... done`). The
+  pickers and `claim.sh` ignore done heartbeats, so the worker run started by a merge does not see
+  the run that just finished as "another worker is active" and wait for the next hourly run. The
+  20-minute stale window applies only to runs that die without a done heartbeat.
+- The reviewer removes `review` before adding `agent-approved` or `changes-requested`. The trigger's
+  label filter looks at the PR's labels, so any label added while `review` is still on fires it
+  again.
+
 ## shop-worker
 
 | Setting | Value |
