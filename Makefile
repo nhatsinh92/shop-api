@@ -7,13 +7,15 @@ SHELL := bash
 
 GRADLE  := ./gradlew --console=plain
 REDOCLY := npx --yes @redocly/cli@2.82.0
-COMPOSE := docker compose -f infra/docker-compose.yml
+DEMO_KEY := infra/.secrets/jwt-private.pem
+# Every compose call gets the same demo signing key, so no command recreates core with another one.
+COMPOSE := AUTH_JWT_PRIVATE_KEY="$$(cat $(DEMO_KEY) 2>/dev/null || true)" docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down seed lock test-scripts contract-breaking
+.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth seed lock test-scripts contract-breaking
 
 help: ## Show targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
 
 test: ## Unit + integration tests (Testcontainers; needs Docker), Modulith and ArchUnit checks
 	$(GRADLE) test
@@ -40,7 +42,13 @@ bundle-contract: ## Bundle core and cart into contracts/dist, check self-contain
 build: ## Build the three boot jars (no tests)
 	$(GRADLE) bootJar
 
-demo: ## Start the full stack in Docker, wait until healthy, load seed data
+$(DEMO_KEY):
+	mkdir -p $(dir $@)
+	umask 077 && openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out $@
+
+demo-key: $(DEMO_KEY) ## Generate the demo JWT signing key once (RSA 2048, PKCS#8, git-ignored)
+
+demo: $(DEMO_KEY) ## Start the full stack in Docker, wait until healthy, load seed data
 	$(COMPOSE) up -d --build --wait postgres redis redpanda mock-payment core cart-service gateway
 	$(COMPOSE) run --rm seed
 	@echo "gateway      http://localhost:8080/actuator/health"
@@ -49,7 +57,7 @@ demo: ## Start the full stack in Docker, wait until healthy, load seed data
 	@echo "mock payment http://localhost:8090/payments"
 	@echo "stop with: make demo-down"
 
-demo-peak: ## Demo plus toxiproxy in front of cart-service, a k6 run and Grafana (:3001)
+demo-peak: $(DEMO_KEY) ## Demo plus toxiproxy in front of cart-service, a k6 run and Grafana (:3001)
 	$(COMPOSE_PEAK) up -d --build --wait \
 		postgres redis redpanda mock-payment core cart-service toxiproxy gateway grafana
 	$(COMPOSE) run --rm seed
@@ -59,8 +67,11 @@ demo-peak: ## Demo plus toxiproxy in front of cart-service, a k6 run and Grafana
 demo-down: ## Stop the demo stack (keeps the database volume)
 	$(COMPOSE_PEAK) down
 
-seed: ## Reload the sample catalog into the running demo database
+seed: $(DEMO_KEY) ## Reload the sample catalog into the running demo database
 	$(COMPOSE) run --rm seed
+
+demo-smoke-auth: ## Login, me, refresh, logout through the gateway of a running demo
+	bash infra/smoke-auth.sh
 
 lock: ## Refresh gradle.lockfile after changing dependencies
 	$(GRADLE) resolveAndLockAll --write-locks

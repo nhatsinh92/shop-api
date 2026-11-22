@@ -18,3 +18,9 @@ runs it again.
 | `an@example.com` | `an-standard-2026` | `STANDARD` (non-member) |
 
 Passwords are stored as BCrypt hashes with cost 12.
+
+## Loading order
+
+`users.sql` needs `auth.users`, so the `seed` compose service waits until `core` is healthy.
+`make seed` therefore works on its own: it starts `postgres` and `core` if they are not running yet.
+`make demo-smoke-auth` logs in as `linh@example.com` from the table above.
