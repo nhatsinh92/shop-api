@@ -22,6 +22,14 @@ final class SessionCookies {
         cookie(HINT, "1", refreshTtl, false).toString());
   }
 
+  /** {@code Set-Cookie} header values that clear the three cookies ({@code Max-Age=0}). */
+  static List<String> clear() {
+    return List.of(
+        cookie(ACCESS, "", Duration.ZERO, true).toString(),
+        cookie(REFRESH, "", Duration.ZERO, true).toString(),
+        cookie(HINT, "", Duration.ZERO, false).toString());
+  }
+
   private static ResponseCookie cookie(
       String name, String value, Duration maxAge, boolean httpOnly) {
     return ResponseCookie.from(name, value)
