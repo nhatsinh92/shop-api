@@ -25,7 +25,7 @@ In scope:
 - The `product.updated` event: an application event inside `core`, externalised to the Redpanda
   topic `product.updated`, and a signed revalidation webhook to shop-web.
 - An internal operation that changes a product's price or stock, so the event can be triggered in
-  tests and in the demo (there is no admin UI; see open question 1).
+  tests and in the demo (there is no admin UI; owner decision 1).
 - A gateway test that `/internal/**` is never routed.
 - Demo wiring: topic, webhook URL and secret in compose, `make demo-smoke-product`.
 
@@ -46,18 +46,36 @@ See `docs/handoff/technical-notes.md` § 3 (caching rules, tags, revalidation we
 | Migrations | Second module with tables, so each module gets its own Flyway instance, location and history table, as `core/CLAUDE.md` asks: `auth` keeps `db/migration/auth` and its existing history table in schema `auth` untouched (no re-run of merged migrations); `product` uses `db/migration/product` and schema `product`. Done in the first product task, with a test that both histories exist and auth's merged migrations are not re-applied. |
 | Tables | `product.categories` (slug, name, parent), `product.products` (id UUID, slug unique, name, brand, description, category, created_at), `product.variants` (sku unique, product, options JSONB, price, list price), `product.images` (product, position, url, alt), `product.stock` (sku, quantity, updated_at), `product.flash_sales` (id, starts_at, ends_at) and `product.flash_sale_items` (sale, sku, sale price, sale stock, sold). Money is `bigint` VND (the contract's `Money.amount` is an integer in the minor unit; VND has none). |
 | Summary SKU | A product's `ProductSummary.sku` is its first variant (lowest position); `price` and `listPrice` come from that variant. `listPrice` is omitted unless it is higher than `price`, as the contract says. Badge `DISCOUNT` when `listPrice` is present. |
-| Seed | `seed/products.sql` loads categories, the ten products of the design canvas (names, brands, prices as on the artboards, the ANC Pro with three colour variants `Đen nhám`, `Trắng sứ`, `Xanh đêm`), placeholder image URLs, stock, and one flash sale whose window is computed at load time (`starts_at = now() - 1 hour`, `ends_at = now() + 2 hours`) so `make demo` always has a running sale. It runs after `core` is healthy (Flyway has created the tables), like `users.sql`. |
+| Seed | `seed/products.sql` loads categories, the ten products of the design canvas (names and brands as on the artboards, the ANC Pro with three colour variants `Đen nhám`, `Trắng sứ`, `Xanh đêm`), placeholder image URLs, stock, and one flash sale whose window is computed at load time (`starts_at = now() - 1 hour`, `ends_at = now() + 2 hours`). It runs after `core` is healthy (Flyway has created the tables), like `users.sql`. The numbers are fixed in "Seed numbers" below so that the artboards, the shop-web fixtures and the seed agree; the current `seed.product` values (for example ANC Pro list price 1 490 000, stock 120) are replaced. The sale window ends two hours after loading: the demo instructions say to run `make demo` again (it reloads the seed) for a new window. |
 | Pagination | `listProducts` orders by `created_at DESC, id DESC`; the cursor is base64url JSON of the last item's `(created_at, id)`. A cursor that does not decode → 400 `PAGINATION_CURSOR_INVALID`; an unknown category slug → 200 with an empty page (filters do not 404). |
 | Cache headers | Exactly the contract's: list and detail `public, max-age=120, stale-while-revalidate=600`; availability `public, max-age=5, stale-while-revalidate=10`; flash sale `public, max-age=60, stale-while-revalidate=120`; member price `private, no-store`; recommendations `private`. Tags: list `products`, detail and availability `product-{id}`, flash sale `flash-sale`. Errors carry `Cache-Control: no-store`. |
 | Approximate stock | `OUT_OF_STOCK` at 0, `LOW` at 1–50 (threshold configurable, `PRODUCT_LOW_STOCK_THRESHOLD`), else `IN_STOCK`. `approxQuantity` only when `LOW`, rounded down to a multiple of 10 with a minimum of 1 (design: "còn khoảng 40"). Read from Postgres; peak caching sits in shop-web and the CDN, warm-up is Phase 6. |
 | Flash sale | "Current" is the sale whose window contains now; none → 404 `FLASH_SALE_NONE`. While a sale runs, an item's `price`/`listPrice` stay the regular card prices and `salePrice` is the sale price; `soldPercent = floor(100 × sold / sale stock)`. During the sale, `availability.price` of a sale SKU is the sale price. |
-| Member price | Tier from the access token's `tier` claim, read through the auth module's public API (no import of `auth` internals; `ModularityTests` stays green). Base price is the current availability price (the sale price during a flash sale); discounts STANDARD 0 %, SILVER 3 %, GOLD 5 %, PLATINUM 8 %, rounded down to 500 VND (design: GOLD 890.000₫ → 845.500₫). Configurable; see open question 2. No token → 401 `AUTH_UNAUTHENTICATED`. |
+| Member price | Tier from the access token's `tier` claim (issued by `AccessTokenIssuer` today), read from Spring Security's `JwtAuthenticationToken` of the current request. The `auth` module has no public type for this (its root package holds only `package-info.java`), so `product` imports nothing from `auth` and `core/.../auth/**` is not changed; `ModularityTests` stays green. Base price is the current availability price (the sale price during a flash sale); discounts STANDARD 0 %, SILVER 3 %, GOLD 5 %, PLATINUM 8 %, rounded down to 500 VND (design: GOLD 890.000₫ → 845.500₫). Configurable (owner decision 2). No token → 401 `AUTH_UNAUTHENTICATED`. |
 | Recommendations | Not personalised in the MVP (the contract keeps the shape independent of how items are chosen): with `productSlug`, other products of the same leaf category, then of the parent, newest first; without it, the current flash sale items followed by the newest products; never the product itself; `limit` as in the contract. Unknown `productSlug` → 200 with the fallback list. |
-| Event | `ProductUpdated` (`eventId`, `occurredAt`, `productId`, `sku`, `slug`, `changes` ⊆ `PRICE`, `STOCK`, `DETAIL`, `tags`), published as a Spring application event after commit. `tags` always holds `product-{id}` and `products`, plus `flash-sale` when the SKU is in the current sale. Its JSON shape is part of the contract (see Contract impact). |
-| Externalisation | Spring Modulith event publication registry (JDBC, its table in the `product` schema via the product Flyway location) plus `spring-modulith-events-kafka`: the event goes to topic `product.updated`, key `sku`, JSON. Incomplete publications are resubmitted on restart, so delivery is at least once and consumers deduplicate by `eventId`. Dependencies added with `make lock`. |
-| Revalidation webhook | A `product` listener POSTs `{eventId, occurredAt, tags}` to `WEB_REVALIDATE_URL` with header `X-Shop-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>" with REVALIDATE_SECRET>`, timeout 2 s, 3 attempts with backoff, then a warning log and the counter `product.revalidate.failed`. No URL configured → the listener is off (tests and local runs). The cache lifetimes on the web side bound staleness when a webhook is lost. |
-| Triggering changes | `PATCH /internal/products/{sku}` (`x-internal: true`, like the JWKS endpoint) with an optional `price`, `listPrice` and `stock`; it requires `X-Internal-Token` equal to `INTERNAL_API_TOKEN` (no token configured → the operation answers 404) and is never routed by the gateway. Used by tests and `make demo-smoke-product`. See open question 1. |
-| Sensitive paths | The member-price task reads the token claim through the auth public API but does not change `core/.../auth/**`. No task touches a protected path. |
+| Event | `ProductUpdated` (`eventId`, `occurredAt`, `productId`, `sku`, `slug`, `changes` ⊆ `PRICE`, `STOCK`, `DETAIL`, `tags`), published as a Spring application event after commit. `tags` depend on what changed, so stock movements at peak do not flush shared caches: with `PRICE` or `DETAIL` in `changes`, `tags` holds `product-{id}` and `products`, plus `flash-sale` when the SKU is in the current sale; with only `STOCK`, `tags` holds only `product-{id}`. Its JSON shape is part of the contract (see Contract impact). |
+| Externalisation | Spring Modulith event publication registry (JDBC) plus `spring-modulith-events-kafka`: the event goes to topic `product.updated`, key `sku`, JSON. Incomplete publications are resubmitted on restart, so delivery is at least once and consumers deduplicate by `eventId`. The registry table is shared by every module that publishes events (order and checkout later), so it lives in its own schema `modulith` with its own Flyway location `db/migration/modulith` and history table, not in `product`. Dependencies added with `make lock`. |
+| Revalidation webhook | A `product` listener POSTs `{eventId, occurredAt, tags}` to `WEB_REVALIDATE_URL` with header `X-Shop-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>" with REVALIDATE_SECRET>`, timeout 2 s, 3 attempts with backoff, then a warning log and the counter `product.revalidate.failed`. No URL configured → the listener is off (tests and local runs). Events whose `changes` is only `STOCK` are not sent to the webhook (they still go to Redpanda): the web caches availability for seconds, so a stock webhook would only expire the hours-cached product detail on every order at peak. The cache lifetimes on the web side bound staleness when a webhook is lost. |
+| Triggering changes | `PATCH /internal/products/{sku}` (`x-internal: true`, like the JWKS endpoint) with an optional `price`, `listPrice` and `stock`; it requires `X-Internal-Token` equal to `INTERNAL_API_TOKEN` (no token configured → the operation answers 404) and is never routed by the gateway. Used by tests and `make demo-smoke-product` (owner decision 1). |
+| Sensitive paths | The member-price task reads the `tier` claim from the Spring Security context and does not change `core/.../auth/**`. No task touches a protected path. |
+
+### Seed numbers
+
+Prices in VND. Flash sale items take the sale price, the struck price and the sold share from the
+Home artboard (`design/Main.dc.html`, the `flash` list); the ANC Pro also matches the PDP artboard
+(890.000₫, struck 1.790.000₫, −50 %, "còn khoảng 40", GOLD 845.500₫).
+
+| Product | `price` | `listPrice` | Stock | Flash sale: sale price / sale stock / sold |
+| --- | --- | --- | --- | --- |
+| Tai nghe không dây chống ồn ANC Pro (3 variants, same prices) | 1 290 000 | 1 790 000 | 40 per variant (`LOW`, `approxQuantity` 40) | 890 000 / 100 / 82 |
+| Nồi chiên không dầu 6L màn hình cảm ứng | 1 690 000 | 2 150 000 | 60 | 1 290 000 / 100 / 64 |
+| Áo khoác gió unisex chống nước | 459 000 | 599 000 | 200 | 359 000 / 100 / 47 |
+| Bàn phím cơ 75% hot-swap | 1 390 000 | 1 690 000 | 45 | 1 150 000 / 100 / 91 |
+| Bình giữ nhiệt inox 750ml | 249 000 | 320 000 | 300 | 189 000 / 100 / 30 |
+| The five recommendation products of the Home artboard | as on the artboard (249 000, 319 000, 199 000, 459 000, 129 000) | none | as today | not in the sale |
+
+The discount percentage the web shows is `round(100 × (1 − shown price / (listPrice ?? price)))`,
+which gives the artboard values (50, 40, 40, 32, 41). shop-web's fixtures use the same numbers.
 
 ## Contract impact
 
@@ -68,8 +86,10 @@ Every public product operation is already in `core.yaml` (1.1.0). Additive chang
   `productRevalidate` (body `{eventId, occurredAt, tags}`, header `X-Shop-Signature`, 204 / 401
   responses), so shop-web types its route handler from the package.
 - `PATCH /internal/products/{sku}` (`x-internal: true`, `security: []` plus the `X-Internal-Token`
-  header parameter, problem responses 400 / 404 / 422), if open question 1 keeps it.
+  header parameter, problem responses 400 / 404 / 422), as owner decision 1 confirms.
 - Any new error code the above needs goes into `x-error-codes`.
+- The `getMemberPrice` example is corrected to follow the rounding rule (base 845 500, GOLD →
+  803 000; today it says 804 000). Examples only, no schema change.
 
 shop-web pins `1.2.0` in its Home + PDP epic. No breaking change.
 
@@ -84,9 +104,11 @@ shop-web pins `1.2.0` in its Home + PDP epic. No breaking change.
 5. [product] `GET /api/flash-sales/current` with the sale window, sale price and `soldPercent` (S).
 6. [product] `GET /api/products/{slug}/member-price` with tier discounts from the token (S).
 7. [product] `GET /api/recommendations` with the non-personalised selection rules (S).
-8. [product] `PATCH /internal/products/{sku}`, the `ProductUpdated` application event and its
-   externalisation to Redpanda through the publication registry (M).
-9. [product] Signed revalidation webhook to shop-web with retries and the failure counter (S).
+8. [product] `PATCH /internal/products/{sku}`, the `ProductUpdated` application event with
+   change-dependent tags, and its externalisation to Redpanda through the publication registry in
+   the `modulith` schema (M).
+9. [product] Signed revalidation webhook to shop-web with retries and the failure counter; stock-only
+   events are not sent (S).
 10. [gateway] Test (and fix if needed) that `/internal/**` is never routed (S).
 11. [infra] Demo wiring: topic creation, `WEB_REVALIDATE_URL`, generated `REVALIDATE_SECRET` and
     `INTERNAL_API_TOKEN` in the git-ignored `infra/.secrets/`, seed after `core`,
@@ -101,6 +123,8 @@ merged. Tasks 2 and 8 change dependencies or Flyway (`make lock`), none touches 
 | Risk | Mitigation |
 | --- | --- |
 | Splitting Flyway re-runs or loses the auth history | Task 2 keeps the auth location, schema and history table name; a Testcontainers test starts from a database migrated by the current `main` configuration and checks nothing is re-applied. |
+| Stock changes at peak (from Phase 5, every order) flush shared caches | Stock-only events carry only `product-{id}` and skip the webhook; availability is cached for seconds on the web side anyway. A test checks that a stock-only change produces a Redpanda record and no webhook call. |
+| A flash sale starts or ends without any product change, so no event fires | The web caches the flash sale with `cacheLife('minutes')`, so a new sale shows within minutes; the countdown hides an ended sale on the client. Warming the cache at the window start is Phase 6. |
 | A lost webhook leaves the web cache stale | At-least-once publication registry, three attempts, failure counter; web cache lifetimes (seconds for price and stock, minutes for the flash sale, hours for product info) cap the staleness. |
 | A forged webhook flushes the web cache at peak | HMAC signature with a timestamp (the web rejects older than 5 minutes); secret only in environment. |
 | The internal operation is reachable from outside | Not routed by the gateway (task 10 tests it), off without `INTERNAL_API_TOKEN`, token compared in constant time. |
@@ -114,17 +138,18 @@ merged. Tasks 2 and 8 change dependencies or Flyway (`make lock`), none touches 
   every one of them (and its documented errors) has a passing contract test.
 - A Testcontainers test changes a product's price through the internal operation and sees exactly
   one `product.updated` record on the topic (key = SKU, body matching `ProductUpdated`) and one
-  signed webhook call on a stub web server with tags `product-{id}` and `products`.
+  signed webhook call on a stub web server with tags `product-{id}` and `products`; a stock-only
+  change produces one record with tags `product-{id}` and no webhook call.
 - `GET /api/flash-sales/current` answers 404 `FLASH_SALE_NONE` outside a sale window, and a sale
   SKU's availability price equals its sale price inside one.
 - `make demo-smoke-product` passes against `make demo`; `make lint test` is green on `main`.
 
-## Open questions for the owner
+## Owner decisions (2026-11-22)
 
-1. **Triggering `product.updated` without an admin UI:** the internal `PATCH /internal/products/{sku}`
-   operation with a token (proposed), or only a test-scoped publisher (no contract change, but the
-   demo cannot show a live revalidation)?
+1. **Triggering `product.updated`:** the internal `PATCH /internal/products/{sku}` operation with
+   `X-Internal-Token`, as proposed (contract change in task 1).
 2. **Member price tiers:** STANDARD 0 %, SILVER 3 %, GOLD 5 %, PLATINUM 8 % of the current price,
-   rounded down to 500 VND (GOLD matches the artboard). Confirm or give the numbers.
-3. **Recommendations:** non-personalised rules for the MVP as above (the artboard's "Vì bạn đã xem …"
-   line has no field in the contract; shop-web's epic proposes dropping that line).
+   rounded down to 500 VND, as configuration.
+3. **Recommendations:** the non-personalised rules above for the MVP. shop-web shows
+   recommendations on the home page only (the PDP artboard has none) and drops the "Vì bạn đã xem …"
+   line; the `productSlug` rules stay because the contract has the parameter.
