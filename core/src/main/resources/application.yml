@@ -51,5 +51,7 @@ auth:
     refresh-grace: ${AUTH_REFRESH_GRACE:10s}
 
 product:
+  # Stock up to and including this many units is reported as LOW.
+  low-stock-threshold: ${PRODUCT_LOW_STOCK_THRESHOLD:50}
   # Shown as a card image for a product that has none.
   placeholder-image-url: ${PRODUCT_PLACEHOLDER_IMAGE_URL:https://placehold.co/800x800?text=no-image}
