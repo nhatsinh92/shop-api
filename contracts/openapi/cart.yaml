@@ -1,8 +1,11 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 0.6.0
-  description: Cart service. Phase 0 exposes health only; the real contract is Phase 1.
+  version: 0.7.0
+  description: >-
+    Cart service for signed-in users and guests. Signed-in users are identified by the access
+    token; guests by the httpOnly cookie `guest_cart` (an opaque id), which the first write
+    without authentication sets. Every cart response is `Cache-Control: private, no-store`.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -17,6 +20,8 @@ security:
 tags:
   - name: health
     description: Liveness and readiness.
+  - name: cart
+    description: Cart read and changes for signed-in users and guests, and the merge on login.
 paths:
   /actuator/health:
     get:
@@ -47,6 +52,335 @@ paths:
                     status: DOWN
         default:
           $ref: './errors.yaml#/components/responses/InternalError'
+  /api/cart:
+    get:
+      operationId: getCart
+      summary: Get the cart
+      description: >-
+        Returns the cart of the signed-in user, or of the guest identified by the `guest_cart`
+        cookie. An empty cart, or a guest without a cookie, is 200 with `items: []`.
+      tags: [cart]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/GuestCart'
+      responses:
+        '200':
+          description: The cart, possibly empty.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              examples:
+                default:
+                  $ref: '#/components/examples/CartWithItems'
+                empty:
+                  $ref: '#/components/examples/EmptyCart'
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+  /api/cart/summary:
+    get:
+      operationId: getCartSummary
+      summary: Get the item count for the header badge
+      tags: [cart]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/GuestCart'
+      responses:
+        '200':
+          description: The number of items in the cart.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartSummary'
+              examples:
+                default:
+                  value:
+                    itemCount: 3
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+  /api/cart/items:
+    post:
+      operationId: addCartItem
+      summary: Add an item to the cart
+      description: >-
+        Adds `quantity` of the SKU. Adding a SKU already in the cart increases its quantity. The
+        first write without authentication creates the guest cart and sets the `guest_cart` cookie.
+      tags: [cart]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/GuestCart'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItemRequest'
+            examples:
+              default:
+                value:
+                  sku: SKU-001
+                  quantity: 1
+      responses:
+        '200':
+          description: The full cart after the change. For a first guest write the response sets `guest_cart`.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Set-Cookie:
+              $ref: '#/components/headers/GuestCartSet'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              examples:
+                default:
+                  $ref: '#/components/examples/CartWithItems'
+                empty:
+                  $ref: '#/components/examples/EmptyCart'
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '404':
+          description: Product not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Product not found
+                    status: 404
+                    code: PRODUCT_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '409':
+          description: Out of stock
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Out of stock
+                    status: 409
+                    code: CART_OUT_OF_STOCK
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '422':
+          description: Cart quantity limit reached
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Cart quantity limit reached
+                    status: 422
+                    code: CART_QTY_LIMIT
+                    detail: A cart holds at most 10 units of one SKU.
+                    limit: 10
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+  /api/cart/items/{sku}:
+    patch:
+      operationId: updateCartItem
+      summary: Set the quantity of a cart item
+      description: >-
+        Sets the absolute quantity (at least 1) of an item in the cart. One request per debounced
+        burst of quantity changes.
+      tags: [cart]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/GuestCart'
+        - name: sku
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Sku'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+            examples:
+              default:
+                value:
+                  quantity: 2
+      responses:
+        '200':
+          description: The full cart after the change.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              examples:
+                default:
+                  $ref: '#/components/examples/CartWithItems'
+                empty:
+                  $ref: '#/components/examples/EmptyCart'
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '404':
+          description: Cart item not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Cart item not found
+                    status: 404
+                    code: CART_ITEM_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '409':
+          description: Out of stock
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Out of stock
+                    status: 409
+                    code: CART_OUT_OF_STOCK
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '422':
+          description: Cart quantity limit reached
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Cart quantity limit reached
+                    status: 422
+                    code: CART_QTY_LIMIT
+                    detail: A cart holds at most 10 units of one SKU.
+                    limit: 10
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+    delete:
+      operationId: removeCartItem
+      summary: Remove an item from the cart
+      tags: [cart]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/GuestCart'
+        - name: sku
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Sku'
+      responses:
+        '200':
+          description: The full cart after the removal.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              examples:
+                default:
+                  $ref: '#/components/examples/CartWithItems'
+                empty:
+                  $ref: '#/components/examples/EmptyCart'
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '404':
+          description: Cart item not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Cart item not found
+                    status: 404
+                    code: CART_ITEM_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+  /api/cart/merge:
+    post:
+      operationId: mergeGuestCart
+      summary: Merge the guest cart into the user cart after login
+      description: >-
+        Requires authentication and the `guest_cart` cookie. Quantities of the same SKU are summed
+        and capped at the per-SKU limit. The response clears `guest_cart` (`Max-Age=0`). Without a
+        guest cookie the user cart is returned unchanged.
+      tags: [cart]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestCart'
+      responses:
+        '200':
+          description: The merged user cart.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Set-Cookie:
+              $ref: '#/components/headers/GuestCartClear'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              examples:
+                default:
+                  $ref: '#/components/examples/CartWithItems'
+                empty:
+                  $ref: '#/components/examples/EmptyCart'
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
 components:
   securitySchemes:
     cookieAuth:
@@ -64,7 +398,128 @@ components:
         Used between the gateway and the services. The gateway reads the `access_token` cookie
         (cookieAuth) and forwards it as `Authorization: Bearer`. Protected operations list
         cookieAuth and bearerAuth as two alternative security requirement objects.
+  parameters:
+    GuestCart:
+      name: guest_cart
+      in: cookie
+      required: false
+      description: >-
+        Opaque id of the guest cart, an httpOnly cookie set by the first write without
+        authentication. Ignored when the caller is signed in (except on merge).
+      schema:
+        type: string
+  headers:
+    CacheControl:
+      description: Cart data is private to the caller and never cached.
+      schema:
+        type: string
+      example: private, no-store
+    GuestCartSet:
+      description: >-
+        Sets the `guest_cart` cookie (httpOnly, Secure, SameSite=Lax, long lived) on the first
+        write without authentication.
+      schema:
+        type: string
+      example: guest_cart=8c1f0f6e9a3b4d2e; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000
+    GuestCartClear:
+      description: Clears the `guest_cart` cookie after the merge.
+      schema:
+        type: string
+      example: guest_cart=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0
+  examples:
+    CartWithItems:
+      value:
+        items:
+          - sku: SKU-001
+            slug: ao-thun-basic
+            name: Ao thun basic
+            imageUrl: https://cdn.example.com/products/sku-001.jpg
+            variantLabel: Den / M
+            unitPrice: { amount: 290000, currency: VND }
+            quantity: 2
+            lineTotal: { amount: 580000, currency: VND }
+            available: true
+        itemCount: 2
+        subtotal: { amount: 580000, currency: VND }
+        updatedAt: '2026-11-21T10:15:00Z'
+    EmptyCart:
+      value:
+        items: []
+        itemCount: 0
+        subtotal: { amount: 0, currency: VND }
+        updatedAt: '2026-11-21T10:15:00Z'
   schemas:
+    CartItem:
+      type: object
+      required: [sku, slug, name, imageUrl, unitPrice, quantity, lineTotal, available]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        slug:
+          $ref: './errors.yaml#/components/schemas/Slug'
+        name:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        variantLabel:
+          type: string
+          description: Variant description such as colour and size, when the product has variants.
+        unitPrice:
+          $ref: './errors.yaml#/components/schemas/Money'
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Units in the cart; at most the per-SKU limit.
+        lineTotal:
+          $ref: './errors.yaml#/components/schemas/Money'
+        available:
+          type: boolean
+          description: False when the SKU is out of stock or no longer sold.
+    Cart:
+      type: object
+      required: [items, itemCount, subtotal, updatedAt]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        itemCount:
+          type: integer
+          minimum: 0
+          description: Total units across all items.
+        subtotal:
+          $ref: './errors.yaml#/components/schemas/Money'
+        updatedAt:
+          type: string
+          format: date-time
+    CartSummary:
+      type: object
+      required: [itemCount]
+      properties:
+        itemCount:
+          type: integer
+          minimum: 0
+    AddCartItemRequest:
+      type: object
+      required: [sku, quantity]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 10
+    UpdateCartItemRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Absolute quantity, not a delta.
     Health:
       type: object
       required: [status]
