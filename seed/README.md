@@ -28,5 +28,5 @@ Passwords are stored as BCrypt hashes with cost 12.
 `make demo-smoke-auth` logs in as `linh@example.com` from the table above.
 
 `make demo-smoke-product` reads the ANC Pro (`tai-nghe-khong-day-anc-pro`, three variants, stock 40
-each, flash sale price 890 000) and changes the price of `SKU-ANC-PRO-BLK`, so run `make seed` to
+each, flash sale price 890 000) and changes the price of `SKU-MOUSE-SIL` (not in the sale), so run `make seed` to
 restore the catalog after it.
