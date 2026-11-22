@@ -1,9 +1,9 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.7.0
+  version: 0.8.0
   description: >-
-    Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price, recommendations and the checkout reservation, shipping and payment options are specified so far.
+    Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price, recommendations and the checkout reservation, shipping and payment options are specified so far, and order placement and lookup.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -33,6 +33,11 @@ tags:
     description: >-
       Stock reservation (10-minute hold), shipping options and payment methods for the checkout
       page. Every operation needs a signed-in user and answers with `Cache-Control: private, no-store`.
+  - name: orders
+    description: >-
+      Place an order from an active checkout reservation, exactly once per `Idempotency-Key`, and
+      read it back. Every operation needs a signed-in user and answers with
+      `Cache-Control: private, no-store`.
 paths:
   /actuator/health:
     get:
@@ -869,6 +874,212 @@ paths:
           $ref: './errors.yaml#/components/responses/Unauthorized'
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/orders:
+    post:
+      operationId: placeOrder
+      summary: Place an order from an active reservation
+      description: >-
+        Creates an order from an `ACTIVE` checkout reservation, the chosen shipping option and
+        payment method, and consumes the reservation. Requires the `Idempotency-Key` header.
+
+        **Idempotency.** A replay with the same key and the same body returns the original status
+        code and body, with the response header `Idempotent-Replayed: true`. The same key with a
+        different body returns 422 `IDEMPOTENCY_KEY_REUSED`. A request that arrives while the first
+        request with that key is still processing returns 409 `IDEMPOTENCY_IN_PROGRESS`. A missing
+        or malformed key returns 400 `IDEMPOTENCY_KEY_MISSING`.
+
+        **Payment.** With `COD` the order is `PLACED` and `payment.status` is `NOT_REQUIRED`. With
+        `EWALLET` or `CARD` the order starts `PENDING_PAYMENT` with `payment.status` `PENDING`
+        (and a `redirectUrl` when the provider needs one) and moves to `PAID` or `PAYMENT_FAILED`
+        as the payment resolves; read it with `GET /api/orders/{id}`.
+      tags: [orders]
+      parameters:
+        - $ref: './errors.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceOrderRequest'
+            examples:
+              cod:
+                summary: Cash on delivery
+                value:
+                  reservationId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  shippingOptionId: STANDARD
+                  paymentMethod: COD
+                  shippingAddress:
+                    fullName: Nguyen Van An
+                    phone: '0901234567'
+                    line1: 12 Nguyen Hue
+                    ward: Ben Nghe
+                    district: District 1
+                    province: Ho Chi Minh City
+                  note: Call before delivery
+              ewallet:
+                summary: E-wallet payment
+                value:
+                  reservationId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  shippingOptionId: EXPRESS_2H
+                  paymentMethod: EWALLET
+                  shippingAddress:
+                    fullName: Nguyen Van An
+                    phone: '0901234567'
+                    line1: 12 Nguyen Hue
+                    ward: Ben Nghe
+                    district: District 1
+                    province: Ho Chi Minh City
+      responses:
+        '201':
+          description: 'The order was created (or, with `Idempotent-Replayed: true`, replayed).'
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CheckoutCacheControl'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              examples:
+                cod:
+                  summary: Cash on delivery
+                  $ref: '#/components/examples/OrderPlacedCod'
+                paymentFailed:
+                  summary: Mock payment failed
+                  $ref: '#/components/examples/OrderPaymentFailed'
+        '400':
+          description: >-
+            The body is invalid (`VALIDATION_FAILED`) or the `Idempotency-Key` header is missing or
+            not a UUID (`IDEMPOTENCY_KEY_MISSING`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                validation:
+                  value:
+                    type: about:blank
+                    title: Validation failed
+                    status: 400
+                    code: VALIDATION_FAILED
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+                    errors:
+                      - field: shippingAddress.phone
+                        code: VALIDATION_FAILED
+                        message: must be a valid phone number
+                keyMissing:
+                  value:
+                    type: about:blank
+                    title: Idempotency key missing
+                    status: 400
+                    code: IDEMPOTENCY_KEY_MISSING
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '404':
+          description: No reservation with this id exists for the caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Reservation not found
+                    status: 404
+                    code: CHECKOUT_RESERVATION_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '409':
+          description: A request with the same `Idempotency-Key` is still being processed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Request in progress
+                    status: 409
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '410':
+          description: The reservation expired or was released; reserve again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Reservation expired
+                    status: 410
+                    code: CHECKOUT_RESERVATION_EXPIRED
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '422':
+          description: The `Idempotency-Key` was already used with a different request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Idempotency key reused
+                    status: 422
+                    code: IDEMPOTENCY_KEY_REUSED
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/orders/{id}:
+    get:
+      operationId: getOrder
+      summary: Get an order
+      description: >-
+        Returns the order with its current `status` and `payment`. An order of another user is
+        reported as not found.
+      tags: [orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: The order.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CheckoutCacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              examples:
+                default:
+                  $ref: '#/components/examples/OrderPlacedCod'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '404':
+          description: No order with this id exists for the caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Order not found
+                    status: 404
+                    code: ORDER_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     cookieAuth:
@@ -931,6 +1142,11 @@ components:
       schema:
         type: string
       example: private, no-store
+    IdempotentReplayed:
+      description: Present and `true` when the response replays the original result for the same `Idempotency-Key`.
+      schema:
+        type: boolean
+      example: true
     SetSessionCookies:
       description: >-
         Three `Set-Cookie` headers: `access_token` and `refresh_token` (both httpOnly, Secure,
@@ -973,6 +1189,58 @@ components:
         subtotal:
           amount: 1691000
           currency: VND
+    OrderPlacedCod:
+      value:
+        id: 0a5f8d4e-6c1b-4f0a-9d3e-2b7c1e8f4a90
+        status: PLACED
+        items:
+          - sku: SKU-ANC-PRO-BLK
+            quantity: 2
+            unitPrice:
+              amount: 845500
+              currency: VND
+            lineTotal:
+              amount: 1691000
+              currency: VND
+        subtotal:
+          amount: 1691000
+          currency: VND
+        shippingFee:
+          amount: 30000
+          currency: VND
+        total:
+          amount: 1721000
+          currency: VND
+        payment:
+          method: COD
+          status: NOT_REQUIRED
+        createdAt: '2026-12-12T03:04:00Z'
+    OrderPaymentFailed:
+      value:
+        id: 5d1c7a22-93b4-4e6f-8a0b-c4e2f9d17b36
+        status: PAYMENT_FAILED
+        items:
+          - sku: SKU-ANC-PRO-BLK
+            quantity: 2
+            unitPrice:
+              amount: 845500
+              currency: VND
+            lineTotal:
+              amount: 1691000
+              currency: VND
+        subtotal:
+          amount: 1691000
+          currency: VND
+        shippingFee:
+          amount: 30000
+          currency: VND
+        total:
+          amount: 1721000
+          currency: VND
+        payment:
+          method: EWALLET
+          status: FAILED
+        createdAt: '2026-12-12T03:04:00Z'
   schemas:
     LoginRequest:
       type: object
@@ -1353,3 +1621,107 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentMethod'
+    ShippingAddress:
+      type: object
+      required: [fullName, phone, line1, ward, district, province]
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+        line1:
+          type: string
+          minLength: 1
+          maxLength: 200
+        ward:
+          type: string
+          minLength: 1
+          maxLength: 100
+        district:
+          type: string
+          minLength: 1
+          maxLength: 100
+        province:
+          type: string
+          minLength: 1
+          maxLength: 100
+    PlaceOrderRequest:
+      type: object
+      required: [reservationId, shippingOptionId, paymentMethod, shippingAddress]
+      properties:
+        reservationId:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        shippingOptionId:
+          type: string
+          enum: [STANDARD, EXPRESS_2H]
+        paymentMethod:
+          type: string
+          enum: [COD, EWALLET, CARD]
+        shippingAddress:
+          $ref: '#/components/schemas/ShippingAddress'
+        note:
+          type: string
+          maxLength: 500
+    OrderStatus:
+      type: string
+      description: >-
+        `PENDING_PAYMENT` while an online payment is unresolved, `PLACED` for an accepted order
+        that needs no payment now (COD), `PAID` after a successful payment, `PAYMENT_FAILED` when
+        the payment failed or timed out, `CANCELLED` once cancelled.
+      enum: [PENDING_PAYMENT, PLACED, PAID, PAYMENT_FAILED, CANCELLED]
+    OrderItem:
+      type: object
+      required: [sku, quantity, unitPrice, lineTotal]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          $ref: './errors.yaml#/components/schemas/Money'
+        lineTotal:
+          $ref: './errors.yaml#/components/schemas/Money'
+    OrderPayment:
+      type: object
+      required: [method, status]
+      properties:
+        method:
+          type: string
+          enum: [COD, EWALLET, CARD]
+        status:
+          type: string
+          enum: [PENDING, SUCCEEDED, FAILED, TIMED_OUT, NOT_REQUIRED]
+        redirectUrl:
+          type: string
+          format: uri
+          description: Where to send the user to complete an online payment, when the provider needs it.
+    Order:
+      type: object
+      required: [id, status, items, subtotal, shippingFee, total, payment, createdAt]
+      properties:
+        id:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        subtotal:
+          $ref: './errors.yaml#/components/schemas/Money'
+        shippingFee:
+          $ref: './errors.yaml#/components/schemas/Money'
+        total:
+          allOf:
+            - $ref: './errors.yaml#/components/schemas/Money'
+          description: '`subtotal` plus `shippingFee`.'
+        payment:
+          $ref: '#/components/schemas/OrderPayment'
+        createdAt:
+          type: string
+          format: date-time
