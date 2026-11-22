@@ -22,6 +22,7 @@ dependencies {
     implementation("org.springframework.modulith:spring-modulith-starter-core")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
+    implementation("org.springframework.modulith:spring-modulith-events-jackson")
     implementation("org.springframework.modulith:spring-modulith-events-jdbc")
     implementation("org.springframework.modulith:spring-modulith-events-kafka")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
