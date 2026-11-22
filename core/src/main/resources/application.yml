@@ -18,8 +18,8 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      # Modulith hands the externalised event over already serialised as JSON.
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Modulith's Kafka message converter turns the event into JSON bytes before the producer.
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
       # Wait for the broker's acknowledgement; the registry resubmits what was not confirmed.
       acks: all
   modulith:
