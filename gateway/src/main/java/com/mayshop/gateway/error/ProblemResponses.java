@@ -32,6 +32,11 @@ public final class ProblemResponses {
     return write(exchange, HttpStatus.TOO_MANY_REQUESTS, "Too many requests", "RATE_LIMITED", null);
   }
 
+  /** Answers 403 {@code AUTH_FORBIDDEN}. */
+  public static Mono<Void> forbidden(ServerWebExchange exchange) {
+    return write(exchange, HttpStatus.FORBIDDEN, "Forbidden", "AUTH_FORBIDDEN", null);
+  }
+
   static Mono<Void> write(
       ServerWebExchange exchange, HttpStatus status, String title, String code, Throwable error) {
     ServerHttpResponse response = exchange.getResponse();
