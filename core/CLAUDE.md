@@ -63,4 +63,13 @@ void listProductsMatchesTheContract() throws Exception {
 
 - May change: the module named by the issue's `area:*` label, plus its tests.
 - Must not change: other modules' internals, `ModularityTests`, `ArchitectureTest`, the contract.
-- Schema changes (when an epic introduces migrations) belong to the owning module only.
+- Schema changes belong to the owning module only.
+
+## Migrations
+
+- Flyway runs at startup. One Postgres schema per module (`auth` for the auth module), and a module
+  owns only its own schema. Scripts live in `src/main/resources/db/migration/<module>/` and are
+  named `V<n>__<description>.sql`; never edit a migration that has been merged, add a new one.
+- Flyway is configured in `application.yml` for the `auth` module today. When a second module gets
+  tables, give each module its own Flyway location and schema instead of sharing one history table.
+- Never store raw secrets (passwords, refresh tokens): only hashes.
