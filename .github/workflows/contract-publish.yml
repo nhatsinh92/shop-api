@@ -50,9 +50,19 @@ jobs:
         if: steps.version.outputs.exists == 'false'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+        # The tarball is found on disk, not read from `npm pack` stdout: lifecycle scripts (prepack)
+        # can print there, which once turned the name into two lines (#37, #39).
         run: |
-          tarball=$(cd contracts && npm pack --silent)
-          gh release create "contract-v$VERSION" "contracts/$tarball" \
+          out=$(mktemp -d)
+          (cd contracts && npm pack --silent --pack-destination "$out" >/dev/null)
+          expected="shop-api-contract-$VERSION.tgz"
+          found=$(ls -A "$out")
+          if [[ $found != "$expected" ]]; then
+            echo "::error::expected exactly $expected in the pack directory, found: ${found:-nothing}"
+            exit 1
+          fi
+          tarball="$out/$expected"
+          gh release create "contract-v$VERSION" "$tarball" \
             --target "$GITHUB_SHA" \
             --title "@shop/api-contract $VERSION" \
-            --notes "Install in shop-web: \`pnpm add https://github.com/$GITHUB_REPOSITORY/releases/download/contract-v$VERSION/$tarball\`"
+            --notes "Install in shop-web: \`pnpm add https://github.com/$GITHUB_REPOSITORY/releases/download/contract-v$VERSION/$expected\`"
