@@ -70,6 +70,18 @@ void listProductsMatchesTheContract() throws Exception {
 - Flyway runs at startup. One Postgres schema per module (`auth` for the auth module), and a module
   owns only its own schema. Scripts live in `src/main/resources/db/migration/<module>/` and are
   named `V<n>__<description>.sql`; never edit a migration that has been merged, add a new one.
-- Flyway is configured in `application.yml` for the `auth` module today. When a second module gets
-  tables, give each module its own Flyway location and schema instead of sharing one history table.
+- Each module has its own Flyway instance, location, schema and history table (the history table
+  `flyway_schema_history` lives in the module's own schema):
+  - `auth`: the auto-configured instance, set in `application.yml` (`spring.flyway`): location
+    `db/migration/auth`, schema `auth`. Do not change it; merged migrations are never re-run.
+  - `product`: configured in code by `ProductMigrationConfiguration`: location
+    `db/migration/product`, schema `product`.
+- Boot's Flyway auto-configuration backs off once any `Flyway` bean exists, so a further module
+  (for example `modulith` for the event publication registry) does not declare a `Flyway` bean.
+  It adds its own instance next to the product one: build a `Flyway` with `Flyway.configure()`
+  (its location, `schemas`, `defaultSchema`, `createSchemas(true)`, the same data source) and
+  migrate it in the `FlywayMigrationStrategy`. Only one `FlywayMigrationStrategy` bean may exist, so
+  the task that adds the third instance merges them into one strategy that migrates every module.
+- Test that a change keeps merged history intact: migrate a database with the old configuration
+  first, then start `core` (see `ProductMigrationTest`).
 - Never store raw secrets (passwords, refresh tokens): only hashes.
