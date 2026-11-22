@@ -25,7 +25,7 @@ lint-java: ## Spotless (google-java-format), Checkstyle, compiler warnings as er
 
 lint-contract: ## OpenAPI lint, contract version and convention checks
 	node contracts/scripts/check-version.mjs
-	node --test contracts/scripts/check-conventions.test.mjs contracts/scripts/check-bundle.test.mjs
+	node --test contracts/scripts/check-conventions.test.mjs contracts/scripts/check-bundle.test.mjs contracts/scripts/check-bundle-cli.test.mjs
 	node contracts/scripts/check-conventions.mjs
 	$(REDOCLY) lint
 	$(MAKE) bundle-contract
