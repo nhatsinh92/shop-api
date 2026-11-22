@@ -1,9 +1,9 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 0.6.0
+  version: 0.7.0
   description: >-
-    Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price and recommendations are specified so far.
+    Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price, recommendations and the checkout reservation, shipping and payment options are specified so far.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -29,6 +29,10 @@ tags:
       and recommendations, which are user-aware and never cached by shared caches.
   - name: flash-sale
     description: The cached flash sale list shown on the home page.
+  - name: checkout
+    description: >-
+      Stock reservation (10-minute hold), shipping options and payment methods for the checkout
+      page. Every operation needs a signed-in user and answers with `Cache-Control: private, no-store`.
 paths:
   /actuator/health:
     get:
@@ -661,6 +665,210 @@ paths:
                         message: must be between 1 and 20
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/checkout/reservations:
+    post:
+      operationId: createCheckoutReservation
+      summary: Confirm price and stock and hold the items for 10 minutes
+      description: >-
+        Confirms the current price and stock of every line and reserves the stock for the signed-in
+        user. The reservation expires 10 minutes after creation (`expiresAt`); the checkout page
+        shows the countdown. The operation is all-or-nothing: when any line lacks stock the
+        response is 409 `CHECKOUT_OUT_OF_STOCK` and nothing is reserved.
+
+        Each line carries the confirmed `unitPrice`. `priceChanged` is true when that price differs
+        from the current catalog-cached price the client last showed, so the page can tell the
+        user before they pay.
+      tags: [checkout]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservationRequest'
+            examples:
+              default:
+                value:
+                  items:
+                    - sku: SKU-ANC-PRO-BLK
+                      quantity: 2
+      responses:
+        '201':
+          description: Stock is reserved for 10 minutes.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CheckoutCacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              examples:
+                default:
+                  $ref: '#/components/examples/ReservationActive'
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '409':
+          description: Not enough stock for at least one line; nothing was reserved.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/OutOfStockProblem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Out of stock
+                    status: 409
+                    code: CHECKOUT_OUT_OF_STOCK
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+                    unavailable:
+                      - sku: SKU-ANC-PRO-BLK
+                        requested: 2
+                        available: 1
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/checkout/reservations/{id}:
+    get:
+      operationId: getCheckoutReservation
+      summary: Get a reservation and its current status
+      description: >-
+        Returns the reservation with its current `status`. A reservation of another user is
+        reported as not found.
+      tags: [checkout]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: The reservation.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CheckoutCacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              examples:
+                default:
+                  $ref: '#/components/examples/ReservationActive'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '404':
+          description: No reservation with this id exists for the caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Reservation not found
+                    status: 404
+                    code: CHECKOUT_RESERVATION_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/checkout/shipping-options:
+    get:
+      operationId: listShippingOptions
+      summary: List the shipping options
+      description: >-
+        Options shown on the checkout page. `reservationId` is optional; when given, the options
+        and fees are those available for the reserved items.
+      tags: [checkout]
+      parameters:
+        - name: reservationId
+          in: query
+          required: false
+          schema:
+            $ref: './errors.yaml#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Shipping options.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CheckoutCacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingOptions'
+              examples:
+                default:
+                  value:
+                    items:
+                      - id: STANDARD
+                        name: Giao tiêu chuẩn
+                        fee:
+                          amount: 0
+                          currency: VND
+                        estimatedDelivery: Nhận 13–14/12
+                      - id: EXPRESS_2H
+                        name: Giao nhanh 2h
+                        fee:
+                          amount: 35000
+                          currency: VND
+                        estimatedDelivery: Nhận trong hôm nay (nội thành)
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '404':
+          description: The `reservationId` does not exist for the caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Reservation not found
+                    status: 404
+                    code: CHECKOUT_RESERVATION_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /api/checkout/payment-methods:
+    get:
+      operationId: listPaymentMethods
+      summary: List the payment methods
+      description: >-
+        Methods shown on the checkout page. `available` is false when a method is temporarily
+        unusable, for example when the payment gateway is down; the page shows it disabled.
+        `EWALLET` and `CARD` are online methods served by the mock payment gateway.
+      tags: [checkout]
+      responses:
+        '200':
+          description: Payment methods.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CheckoutCacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethods'
+              examples:
+                default:
+                  value:
+                    items:
+                      - id: COD
+                        name: Thanh toán khi nhận hàng (COD)
+                        available: true
+                      - id: EWALLET
+                        name: Ví điện tử
+                        available: true
+                      - id: CARD
+                        name: Thẻ ngân hàng / thẻ tín dụng
+                        available: false
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
 components:
   securitySchemes:
     cookieAuth:
@@ -718,6 +926,11 @@ components:
         type: string
       example: flash-sale
       x-cache-tags: [flash-sale]
+    CheckoutCacheControl:
+      description: Checkout data belongs to one user and changes quickly; no cache may store it.
+      schema:
+        type: string
+      example: private, no-store
     SetSessionCookies:
       description: >-
         Three `Set-Cookie` headers: `access_token` and `refresh_token` (both httpOnly, Secure,
@@ -741,6 +954,25 @@ components:
         - access_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax
         - refresh_token=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax
         - logged_in=; Max-Age=0; Path=/; Secure; SameSite=Lax
+  examples:
+    ReservationActive:
+      value:
+        id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        status: ACTIVE
+        expiresAt: '2026-12-12T03:10:00Z'
+        items:
+          - sku: SKU-ANC-PRO-BLK
+            quantity: 2
+            unitPrice:
+              amount: 845500
+              currency: VND
+            lineTotal:
+              amount: 1691000
+              currency: VND
+            priceChanged: false
+        subtotal:
+          amount: 1691000
+          currency: VND
   schemas:
     LoginRequest:
       type: object
@@ -994,3 +1226,130 @@ components:
         status:
           type: string
           enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]
+    CreateReservationRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [sku, quantity]
+            properties:
+              sku:
+                $ref: './errors.yaml#/components/schemas/Sku'
+              quantity:
+                type: integer
+                minimum: 1
+                maximum: 99
+    ReservationStatus:
+      type: string
+      description: >-
+        `ACTIVE` while the hold is valid, `EXPIRED` after `expiresAt`, `CONSUMED` once an order was
+        placed from it, `RELEASED` when it was given back before expiry.
+      enum: [ACTIVE, EXPIRED, CONSUMED, RELEASED]
+    ReservationItem:
+      type: object
+      required: [sku, quantity, unitPrice, lineTotal, priceChanged]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          allOf:
+            - $ref: './errors.yaml#/components/schemas/Money'
+          description: Price confirmed when the stock was reserved.
+        lineTotal:
+          allOf:
+            - $ref: './errors.yaml#/components/schemas/Money'
+          description: '`unitPrice` times `quantity`.'
+        priceChanged:
+          type: boolean
+          description: >-
+            True when the confirmed price differs from the current catalog-cached price.
+    Reservation:
+      type: object
+      required: [id, status, expiresAt, items, subtotal]
+      properties:
+        id:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        expiresAt:
+          type: string
+          format: date-time
+          description: Exactly 10 minutes after the reservation was created.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReservationItem'
+        subtotal:
+          allOf:
+            - $ref: './errors.yaml#/components/schemas/Money'
+          description: Sum of the line totals, before shipping.
+    OutOfStockProblem:
+      description: '`CHECKOUT_OUT_OF_STOCK` problem with the affected SKUs in `unavailable`.'
+      allOf:
+        - $ref: './errors.yaml#/components/schemas/Problem'
+        - type: object
+          required: [unavailable]
+          properties:
+            unavailable:
+              type: array
+              items:
+                type: object
+                required: [sku, requested, available]
+                properties:
+                  sku:
+                    $ref: './errors.yaml#/components/schemas/Sku'
+                  requested:
+                    type: integer
+                    minimum: 1
+                  available:
+                    type: integer
+                    minimum: 0
+    ShippingOption:
+      type: object
+      required: [id, name, fee, estimatedDelivery]
+      properties:
+        id:
+          type: string
+          enum: [STANDARD, EXPRESS_2H]
+        name:
+          type: string
+        fee:
+          $ref: './errors.yaml#/components/schemas/Money'
+        estimatedDelivery:
+          type: string
+          description: Delivery estimate, ready to display.
+    ShippingOptions:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShippingOption'
+    PaymentMethod:
+      type: object
+      required: [id, name, available]
+      properties:
+        id:
+          type: string
+          enum: [COD, EWALLET, CARD]
+        name:
+          type: string
+        available:
+          type: boolean
+    PaymentMethods:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethod'

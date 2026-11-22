@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 0.6.0
+  version: 0.7.0
   description: >-
     Cart service for signed-in users and guests. Signed-in users are identified by the access
     token; guests by the httpOnly cookie `guest_cart` (an opaque id), which the first write
@@ -200,6 +200,7 @@ paths:
                     status: 422
                     code: CART_QTY_LIMIT
                     detail: A cart holds at most 10 units of one SKU.
+                    limit: 10
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
@@ -291,6 +292,7 @@ paths:
                     status: 422
                     code: CART_QTY_LIMIT
                     detail: A cart holds at most 10 units of one SKU.
+                    limit: 10
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
