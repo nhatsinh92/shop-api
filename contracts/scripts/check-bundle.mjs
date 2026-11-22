@@ -32,5 +32,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
   }
   if (failed) process.exit(1);
-  console.log(`bundled specs are self-contained: ${files.join(', ')}`);
+  // stderr, not stdout: this runs in `prepack`, and `npm pack --silent` output must be only the
+  // tarball name (contract-publish reads it).
+  console.error(`bundled specs are self-contained: ${files.join(', ')}`);
 }
