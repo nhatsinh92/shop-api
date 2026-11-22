@@ -30,11 +30,12 @@ lint-contract: ## OpenAPI lint, contract version and convention checks
 	$(REDOCLY) lint
 	$(MAKE) bundle-contract
 
-bundle-contract: ## Bundle core and cart into contracts/dist and check self-contained refs
+bundle-contract: ## Bundle core and cart into contracts/dist, check self-contained refs and lint the bundles
 	rm -rf contracts/dist
 	cd contracts && $(REDOCLY) bundle openapi/core.yaml -o dist/core.yaml
 	cd contracts && $(REDOCLY) bundle openapi/cart.yaml -o dist/cart.yaml
 	node contracts/scripts/check-bundle.mjs contracts/dist
+	$(REDOCLY) lint contracts/dist/core.yaml contracts/dist/cart.yaml
 
 build: ## Build the three boot jars (no tests)
 	$(GRADLE) bootJar

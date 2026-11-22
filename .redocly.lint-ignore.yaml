@@ -6,3 +6,9 @@ contracts/openapi/core.yaml:
 contracts/openapi/cart.yaml:
   operation-4xx-response:
     - '#/paths/~1actuator~1health/get/responses'
+contracts/dist/core.yaml:
+  operation-4xx-response:
+    - '#/paths/~1actuator~1health/get/responses'
+contracts/dist/cart.yaml:
+  operation-4xx-response:
+    - '#/paths/~1actuator~1health/get/responses'
