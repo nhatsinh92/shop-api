@@ -27,6 +27,21 @@ Rules:
 - `auth` is security-sensitive: PRs touching `core/src/main/java/com/mayshop/core/auth/**` merge on
   `agent-approved` and green CI (owner decision 2026-11-22), so every rule needs a test, negative cases included.
 
+## Events
+
+- `ProductUpdated` (root package of `product`, public API) is published after the commit of every
+  internal price or stock change and externalised by `spring-modulith-events-kafka` to the topic
+  `product.updated` (key = SKU, JSON value = the contract's `ProductUpdated`). Delivery is at least
+  once.
+- The event publication registry is JDBC, in schema `modulith` (`db/migration/modulith`, own Flyway
+  history). `spring.modulith.events.jdbc.schema=modulith` points Modulith at it. Incomplete
+  publications are resubmitted on restart (`republish-outstanding-events-on-restart`).
+- Contexts without a `DataSource` (tests that exclude it) get a map-backed registry from
+  `EventRegistryConfiguration`, because Modulith's JDBC auto-configuration requires a DataSource.
+- `PATCH /internal/products/{sku}` is guarded by `X-Internal-Token` = `INTERNAL_API_TOKEN` (checked in
+  the handler; every failure is a 404). A separate `SecurityFilterChain` for `/internal/**` permits
+  the request without a JWT.
+
 ## Commands
 
 - `./gradlew :core:test` (Testcontainers Postgres; needs Docker)
@@ -76,6 +91,8 @@ void listProductsMatchesTheContract() throws Exception {
     `db/migration/auth`, schema `auth`. Do not change it; merged migrations are never re-run.
   - `product`: configured in code by `ProductMigrationConfiguration`: location
     `db/migration/product`, schema `product`.
+  - `modulith` (event publication registry): the same configuration class migrates location
+    `db/migration/modulith`, schema `modulith`.
 - Boot's Flyway auto-configuration backs off once any `Flyway` bean exists, so a further module
   (for example `modulith` for the event publication registry) does not declare a `Flyway` bean.
   It adds its own instance next to the product one: build a `Flyway` with `Flyway.configure()`
