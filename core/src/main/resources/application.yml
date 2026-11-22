@@ -24,3 +24,13 @@ management:
     health:
       probes:
         enabled: true
+
+auth:
+  jwt:
+    # PKCS#8 RSA private key in PEM form. Blank: an ephemeral key is generated at startup.
+    private-key: ${AUTH_JWT_PRIVATE_KEY:}
+    # Optional public key (PEM) of the previous signing key, published during rotation.
+    previous-public-key: ${AUTH_JWT_PREVIOUS_PUBLIC_KEY:}
+    issuer: ${AUTH_JWT_ISSUER:mayshop-core}
+    audience: ${AUTH_JWT_AUDIENCE:mayshop}
+    access-token-ttl: ${AUTH_ACCESS_TOKEN_TTL:10m}
