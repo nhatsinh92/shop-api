@@ -19,6 +19,14 @@ spring:
               predicates:
                 - Path=/api/**
 
+gateway:
+  auth:
+    issuer: ${AUTH_JWT_ISSUER:mayshop-core}
+    audience: ${AUTH_JWT_AUDIENCE:mayshop}
+    # Fetched lazily on the first request that carries an access cookie, so the gateway starts while
+    # core is down. Only /api/** is routed; /.well-known/** is never exposed.
+    jwks-uri: ${CORE_URL:http://localhost:8081}/.well-known/jwks.json
+
 management:
   endpoints:
     web:

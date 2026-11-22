@@ -18,6 +18,18 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
   CORS only for the web origin; `Origin` check on state-changing requests.
 - No business logic and no data access beyond Redis for rate limits and the optional denylist.
 
+## Access-token handling (`com.mayshop.gateway.auth`)
+
+- `AccessCookieFilter` (global filter): removes any client `Authorization`, verifies the
+  `access_token` cookie and forwards it as `Bearer`; an invalid cookie is removed from `Cookie`, counted
+  (`gateway.auth.token.invalid`, tag `reason`) and logged (never the token). The gateway never answers
+  401. `/api/auth/login|refresh|logout` keep their cookies untouched.
+- `AccessTokenVerifier` uses the reactive `spring-security-oauth2-jose` decoder; `JwksKeySource` fetches
+  the JWKS lazily, caches it 5 minutes and refetches an unknown `kid` at most once per 30 seconds.
+- `ProblemErrorHandler` turns every gateway-made error into `application/problem+json` with `code`
+  and `traceId`.
+- Settings: `AUTH_JWT_ISSUER`, `AUTH_JWT_AUDIENCE` (same defaults as core) and `CORE_URL`.
+
 ## Commands
 
 - `./gradlew :gateway:test`
