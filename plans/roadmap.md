@@ -7,8 +7,8 @@ Java 21, Spring Boot 4.0 (see "Deviations"), Gradle.
 | Phase | Epic | Deliverables | Done when | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Bootstrap | Gradle multi-project, CLAUDE.md per module, CI + merge-gate, docker-compose, Makefile, branch protection, picker scripts and role prompts | `make demo` starts all containers on a clean machine; CI green on an empty module | Done (#1) |
-| 1 | [Contract v1](epics/contract-v1.md) | OpenAPI for auth, products, cart, checkout, orders; shared error schema; idempotency header; package release | `@shop/api-contract@1.0.0` released; contract lint passes | Approved (#2); tasks #7–#14 |
-| 2 | Auth + gateway | Login, refresh with rotation and grace period, logout, JWKS endpoint; gateway JWT verification, cookie → Bearer, routes, Redis rate limit | Expired token refresh works; revoked refresh token rejected; gateway rejects bad JWT | Not started |
+| 1 | [Contract v1](epics/contract-v1.md) | OpenAPI for auth, products, cart, checkout, orders; shared error schema; idempotency header; package release | `@shop/api-contract@1.0.0` released; contract lint passes | Done (#2) |
+| 2 | [Auth + gateway](epics/auth-gateway.md) | Login, refresh with rotation and grace period, logout, JWKS endpoint; gateway JWT verification, cookie → Bearer, routes, Redis rate limit | Expired token refresh works; revoked refresh token rejected; gateway rejects bad JWT | Approved (#42) |
 | 3 | Product | Catalog, product detail, flash-sale list, approximate stock; `product.updated` events | Seeded catalog served; event emitted on change (feeds FE `revalidateTag`) | Not started |
 | 4 | Cart | Redis hash per user, add / update / remove with atomic ops, guest cart + merge on login, enriched response, write-behind to Postgres via Redpanda | p95 under 50 ms locally under k6; concurrency test passes | Not started |
 | 5 | Checkout + order | Price and stock confirmation, stock reservation with 10-minute TTL, order placement with `Idempotency-Key`, mock payment (success / fail / timeout), COD | Double submit creates one order; expired reservation releases stock | Not started |
