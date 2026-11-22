@@ -1,7 +1,8 @@
 # gateway — agent guide
 
-Read the root `CLAUDE.md` first. Everything in this module is a **sensitive path**: every PR that
-touches `gateway/` needs the owner's `human-approved` label before `merge-gate` passes.
+Read the root `CLAUDE.md` first. Everything in this module is security-sensitive. Since the
+owner decision 2026-11-22 it merges on `agent-approved` and green CI without `human-approved`, so every rule needs a
+test, including the negative cases (bad token, wrong `Origin`, limit exceeded).
 
 ## Stack
 
