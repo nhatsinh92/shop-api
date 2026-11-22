@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 0.7.0
+  version: 0.8.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -57,7 +57,7 @@ x-error-codes:
       No reservation with this id exists for the caller (another user's reservation is not found
       either).
   CHECKOUT_RESERVATION_EXPIRED:
-    status: 409
+    status: 410
     description: >-
       The reservation passed its 10-minute expiry (or was released); reserve again.
   PAGINATION_CURSOR_INVALID:
@@ -90,6 +90,15 @@ x-error-codes:
     status: 422
     description: >-
       The Idempotency-Key was already used with a different request body.
+  IDEMPOTENCY_IN_PROGRESS:
+    status: 409
+    description: >-
+      A request with the same Idempotency-Key is still being processed; retry shortly with the same
+      key.
+  ORDER_NOT_FOUND:
+    status: 404
+    description: >-
+      No order with this id exists for the caller (another user's order is not found either).
   UNPROCESSABLE_ENTITY:
     status: 422
     description: >-
