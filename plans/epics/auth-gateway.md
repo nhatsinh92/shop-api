@@ -31,7 +31,7 @@ In scope:
   against `make demo`.
 
 Out of scope: registration, password reset, social login, email verification; the instant
-revocation denylist (optional in technical notes § 6; see open questions); bearer verification in
+revocation denylist (optional in technical notes § 6; see owner decisions); bearer verification in
 `cart-service` (Cart epic, Phase 4); guest cart merge on login (Phase 4); any frontend work.
 
 ## Decisions
@@ -46,36 +46,41 @@ See `docs/handoff/technical-notes.md` § 5 (auth flows) and § 6 (gateway). The 
 | Sessions | One `auth.sessions` row per login; refresh tokens belong to a session (token family). Refresh tokens are 256-bit random opaque strings; only their SHA-256 hash is stored. |
 | Access token | RS256 JWT, lifetime 10 minutes (`Max-Age=600`, as in the contract example); claims `sub` (user id), `sid` (session id), `tier`, `iat`, `exp`, `iss`, `aud`, header `kid`. The `access_token` cookie's `Max-Age` equals the token lifetime, so browsers drop expired tokens themselves. |
 | Refresh token | Lifetime 14 days (`Max-Age=1209600`, as in the contract example), cookie `Path=/`. Rotated on every use. |
-| Grace period | 10 seconds, configurable. On rotation `core` writes `auth:grace:{oldHash}` → session id to Redis with that TTL; presenting the old token inside the window issues a fresh pair for the same session, so parallel tabs and parallel SSR refreshes all succeed. |
+| Grace period | 10 seconds, configurable. On rotation `core` writes `auth:grace:{oldHash}` → session id to Redis with that TTL; presenting the old token inside the window issues a fresh pair for the same session, so parallel tabs and parallel SSR refreshes all succeed. Every token issued from the same old token inside the window is a live token of the session (siblings, not successors of each other): using any one of them later rotates only that token and never triggers reuse detection. |
 | Reuse detection | A rotated token presented after the grace period revokes the whole session and returns 401 `AUTH_REFRESH_INVALID`. |
 | Logout | Revokes the session (all its refresh tokens) and clears the three cookies; succeeds without a valid token, as the contract says. Access tokens already issued stay valid until they expire (at most 10 minutes). |
 | Signing keys | PEM private key from `AUTH_JWT_PRIVATE_KEY` (and optional `AUTH_JWT_PREVIOUS_PUBLIC_KEY` for rotation, published in the JWKS next to the current key). Without it (local runs, tests) `core` generates an ephemeral key at startup and logs a warning. `make demo` generates a demo key once into the git-ignored `infra/.secrets/` (openssl) and passes it to `core`; no private key is committed (gitleaks would fail it anyway). |
 | Cookie flags | `HttpOnly; Secure; SameSite=Lax; Path=/` for both tokens; `logged_in=1` without `HttpOnly`. `Secure` cookies work on `http://localhost`, which the demo uses. |
+| Redis in core | `spring-boot-starter-data-redis` in `core` for the grace-period keys (compose already passes `REDIS_HOST`); added in task 6 with `make lock`. |
 | Bearer in core | `spring-boot-starter-oauth2-resource-server` with the local public keys (no network call); `GET /api/auth/me` accepts `cookieAuth` or `bearerAuth` as the contract lists. |
 | Gateway verification | `spring-security-oauth2-jose` reactive decoder with the JWKS URI of `core` (`CORE_URL/.well-known/jwks.json`), cached for 5 minutes (`Cache-Control: max-age=300`) and refreshed on an unknown `kid`. |
-| Gateway token rules | The gateway removes any `Authorization` header sent by the browser and builds it only from the `access_token` cookie. No cookie → forwarded without `Authorization` (services decide). A cookie with a bad signature, wrong issuer or audience, or an expired token → 401 `AUTH_UNAUTHENTICATED` (problem details), which triggers the browser's single-flight refresh. `/api/auth/login`, `/api/auth/refresh` and `/api/auth/logout` are exempt so an expired session can always be refreshed or cleared. `/.well-known/**` is not routed. |
-| Rate limits | Spring Cloud Gateway `RequestRateLimiter` with the Redis token bucket. Key: `sub` when a valid token is present, else client IP. Proposed defaults (environment variables, tuned in Phase 6): `/api/auth/login` and `/api/auth/refresh` 10 requests per minute per IP; other `/api/**` 20 requests per second, burst 40. Exceeded → 429 `RATE_LIMITED` problem with `Retry-After`. |
+| Gateway token rules | The gateway removes any `Authorization` header sent by the browser and builds it only from the `access_token` cookie. No cookie → forwarded without `Authorization` (services decide). A cookie with a bad signature, an unknown `kid`, wrong issuer or audience, or an expired token is stripped and the request is forwarded anonymously, exactly like a request without the cookie (owner decision 2026-11-22): public operations answer as for a guest, protected operations get 401 `AUTH_UNAUTHENTICATED` from the service, which triggers the browser's single-flight refresh. The gateway logs and counts stripped tokens (metric `gateway.auth.token.invalid`, tagged by reason) so a key-rotation mistake is visible at once. `/api/auth/login`, `/api/auth/refresh` and `/api/auth/logout` are exempt so an expired session can always be refreshed or cleared. `/.well-known/**` is not routed. |
+| Rate limits | Spring Cloud Gateway `RequestRateLimiter` with the Redis token bucket (`spring-boot-starter-data-redis-reactive` in `gateway`). **`/api/cart/**` is never rate limited** (technical notes § 7: limits sit at checkout, never on the cart; owner decision 2026-11-22). Keys and defaults (environment variables, tuned in Phase 6), chosen so that many users behind one carrier-grade NAT address are not blocked together: `/api/auth/login` 5 requests per minute per normalised email plus 60 per minute per IP; `/api/auth/refresh` 10 per minute per refresh-token hash (the session), no per-IP limit; other `/api/**` routed to `core` 20 requests per second, burst 40, keyed by `sub` when a valid token is present, else client IP. Exceeded → 429 `RATE_LIMITED` problem with `Retry-After`. |
 | CORS and CSRF | CORS allows only `WEB_ORIGIN` (default `http://localhost:3000`) with credentials. State-changing methods (`POST`, `PUT`, `PATCH`, `DELETE`) are rejected with 403 `AUTH_FORBIDDEN` when `Origin` is present and not `WEB_ORIGIN`, or absent while `Sec-Fetch-Site` is `cross-site`. Together with `SameSite=Lax` this is the CSRF protection. |
 | Errors | Every error the gateway itself produces is `application/problem+json` with a `code` from `errors.yaml` and a `traceId`. |
 | Contract tests | A test helper in `core` that loads the bundled `contracts/dist/core.yaml` and validates MockMvc responses (status, headers, body). Library: `swagger-request-validator-mockmvc`, if its OpenAPI 3.1 support covers our spec (checked in its task); fallback: `networknt` JSON Schema validation of the response schemas. |
-| Sensitive paths | `gateway/**` and `core/src/main/java/com/mayshop/core/auth/**` are sensitive: every PR of this epic except the contract and infra tasks needs the owner's `human-approved` label. |
+| Sensitive paths | `gateway/**` and `core/src/main/java/com/mayshop/core/auth/**` are sensitive: tasks 4–10 touch them and need the owner's `human-approved` label; tasks 1–3 and 11 do not. |
 
 ## Contract impact
 
 `/api/auth/*` and the JWKS endpoint are already specified in 1.0.0; no change is needed for them.
 The gateway adds responses that the spec does not document yet:
 
-- 401 `AUTH_UNAUTHENTICATED` on public operations when an invalid or expired access cookie is sent;
 - 403 `AUTH_FORBIDDEN` on state-changing operations for a failed `Origin` check;
-- 429 `RATE_LIMITED` on the cart operations in `cart.yaml` (none document it today).
+- 403 `AUTH_FORBIDDEN` on the state-changing operations of `cart.yaml` too (the `Origin` check
+  covers the cart; only rate limits skip it);
+- 429 `RATE_LIMITED` on `GET /api/auth/me`, the only rate-limited `core` operation that does not
+  document it. Cart operations get no 429, because the cart is not rate limited.
+
+An invalid access cookie needs no contract change: the gateway strips it and the documented
+anonymous behaviour applies.
 
 These are additive (minor version, `1.1.0`) and form the first task, which runs before the
-gateway tasks. If the owner prefers the gateway to forward requests with an invalid cookie
-anonymously instead of rejecting them (open question 1), the 401 part is dropped.
+gateway tasks.
 
 ## Expected tasks (the planner details them after approval)
 
-1. [contract] Document gateway-level 401 / 403 / 429 responses, release `1.1.0` (S).
+1. [contract] Document gateway-level 403 and 429 responses, release `1.1.0` (S).
 2. [auth] Contract-test helper in `core` validating responses against the bundled spec (S).
 3. [auth] Flyway, `auth` schema (users, sessions, refresh tokens), demo users in `seed/` (M).
 4. [auth] Signing keys, access-token issuing and `GET /.well-known/jwks.json` (S).
@@ -84,7 +89,7 @@ anonymously instead of rejecting them (open question 1), the 401 part is dropped
 6. [auth] `POST /api/auth/refresh` with rotation, Redis grace period and reuse detection (M).
 7. [auth] `POST /api/auth/logout` with session revocation (S).
 8. [gateway] Cookie → Bearer with cached JWKS verification, token rules and problem errors (M).
-9. [gateway] Redis rate limits per user and per IP with 429 problems (S).
+9. [gateway] Redis rate limits (login per email and IP, refresh per session, `core` routes per user or IP; none on `/api/cart/**`) with 429 problems (S).
 10. [gateway] CORS for the web origin and the `Origin` check (S).
 11. [infra] Demo wiring: generated demo key and environment in compose, seed after `core` is healthy,
     `make demo-smoke-auth` (login → me → refresh → logout through the gateway) (S).
@@ -100,8 +105,9 @@ neither touches protected paths. Task 11 does not touch protected paths either (
 | Risk | Mitigation |
 | --- | --- |
 | Every auth and gateway PR waits for the owner (`human-approved`) | Tasks are small and ordered so that non-sensitive tasks (contract, contract-test helper, infra) run while sensitive PRs wait. |
+| An invalid cookie silently downgrades a signed-in user to a guest on public and optional-auth operations (member price, recommendations, cart) | Access-cookie `Max-Age` equals the token lifetime, so this mostly happens after a key problem, which the `gateway.auth.token.invalid` metric shows; `proxy.ts` and the browser refresh when `logged_in=1` (shop-web Layout + auth epic). |
 | Grace period lets a stolen refresh token be used once more | The window is 10 seconds and only for the token just rotated; reuse after it revokes the session. |
-| Access tokens stay valid after logout for up to 10 minutes | Accepted for the MVP; the optional Redis denylist (open question 2) closes the gap. |
+| Access tokens stay valid after logout for up to 10 minutes | Accepted for the MVP; the optional Redis denylist (Phase 6, owner decision 2) closes the gap. |
 | JWKS fetch at gateway startup races `core` startup | The decoder fetches lazily and retries; compose already starts the gateway after `core` is healthy. |
 | Testcontainers tests cannot run in cloud sessions (no Docker) | They run in CI, where skipped tests fail the build; workers wait with `checks-wait`. |
 | OpenAPI 3.1 support of the contract-test library is incomplete | Checked first in task 2, with the JSON Schema fallback decided above. |
@@ -113,21 +119,21 @@ neither touches protected paths. Task 11 does not touch protected paths either (
   in the test), refreshes, and calls `GET /api/auth/me` successfully.
 - A revoked refresh token (after logout, and a rotated token reused after the grace period) is
   rejected with 401 `AUTH_REFRESH_INVALID`.
-- The gateway returns 401 `AUTH_UNAUTHENTICATED` for a token with a bad signature, an unknown
-  `kid` or an expired `exp`, and forwards a valid one as `Authorization: Bearer` (gateway tests
+- The gateway strips a token with a bad signature, an unknown `kid` or an expired `exp` and
+  forwards the request without `Authorization` (a protected operation then answers 401
+  `AUTH_UNAUTHENTICATED`), and forwards a valid one as `Authorization: Bearer` (gateway tests
   with a stubbed JWKS).
+- Two parallel refreshes with the same token inside the grace period both succeed, and both new
+  tokens can be used afterwards without revoking the session.
+- No request to `/api/cart/**` is ever answered 429 by the gateway (gateway test).
 - `make demo-smoke-auth` passes against `make demo`; every auth operation has a contract test;
   `make lint test` is green on `main`.
 
-## Open questions for the owner
+## Owner decisions (2026-11-22)
 
-1. **Invalid access cookie on public routes:** the gateway rejects it with 401 (proposed, so the
-   browser refreshes), or strips it and forwards the request anonymously (no contract change for
-   public operations, but expired sessions are noticed later)?
-2. **Instant revocation:** add the optional Redis session denylist checked by the gateway in this
-   phase, or leave it for Phase 6 (proposed: leave it out)?
-3. **Lifetimes and limits:** confirm access 10 minutes, refresh 14 days, grace 10 seconds and the
-   proposed rate-limit defaults.
-4. **Demo key:** `make demo` generates the signing key into the git-ignored `infra/.secrets/`
-   (proposed, keeps keys out of the public repo), or should every `make demo` run use an
-   ephemeral key generated by `core` (sessions then end on each restart)?
+1. **Invalid access cookie:** the gateway strips it and forwards the request anonymously; no 401
+   from the gateway itself.
+2. **Instant revocation:** left out of this phase (revisit in Phase 6).
+3. **Lifetimes:** access 10 minutes, refresh 14 days, grace 10 seconds, as proposed. Rate limits:
+   none on the cart; the keys and defaults in the decision table above.
+4. **Demo key:** `make demo` generates it into the git-ignored `infra/.secrets/`.
