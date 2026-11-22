@@ -83,7 +83,9 @@ already sends the worker to PRs with requested changes before new work, so the n
 Several worker runs can start together (an event and the hourly run, or events in both
 repositories). Every worker run calls `scripts/claim.sh` right after the picker: it posts its
 heartbeat, waits 15 seconds, and continues only if no older fresh worker heartbeat exists; the
-others end at once.
+others end at once. Runs on the same issue can share one heartbeat comment, so the claim also ends a
+run at once when that issue already has a fresh heartbeat not marked done, and every run writes a
+unique claim marker into the heartbeat: a run whose marker was overwritten by a later run backs off.
 
 Why these are safe to fire often: the pickers decide what to do, so an extra run ends at once with
 `{"action":"none"}`; heartbeats and `claim.sh` keep a single worker active; the reviewer skips a PR another
