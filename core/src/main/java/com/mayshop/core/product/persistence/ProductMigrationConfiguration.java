@@ -19,13 +19,29 @@ class ProductMigrationConfiguration {
 
   static final String LOCATION = "classpath:db/migration/product";
   static final String SCHEMA = "product";
+  static final String MODULITH_LOCATION = "classpath:db/migration/modulith";
+  static final String MODULITH_SCHEMA = "modulith";
 
   @Bean
   FlywayMigrationStrategy productMigrationStrategy() {
     return auth -> {
       auth.migrate();
       productFlyway(auth).migrate();
+      modulithFlyway(auth).migrate();
     };
+  }
+
+  /**
+   * The event publication registry of Spring Modulith: schema {@code modulith}, own history table.
+   */
+  static Flyway modulithFlyway(Flyway auth) {
+    return Flyway.configure()
+        .dataSource(auth.getConfiguration().getDataSource())
+        .locations(MODULITH_LOCATION)
+        .schemas(MODULITH_SCHEMA)
+        .defaultSchema(MODULITH_SCHEMA)
+        .createSchemas(true)
+        .load();
   }
 
   static Flyway productFlyway(Flyway auth) {

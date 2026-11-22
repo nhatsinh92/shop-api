@@ -38,13 +38,18 @@ class AvailabilityController {
   @GetMapping("/api/products/{sku}/availability")
   ResponseEntity<Availability> getProductAvailability(@PathVariable String sku) {
     AvailabilityRow row = queries.findBySku(sku).orElseThrow(ProductNotFoundException::new);
-    long price = PriceRule.currentPrice(row.variantPrice(), row.sales(), Instant.now(clock));
-    StockLevel level = StockLevel.of(row.quantity(), lowThreshold);
-    Integer approx = level.approxQuantity(row.quantity()).stream().boxed().findFirst().orElse(null);
     return ResponseEntity.ok()
         .header("Cache-Control", CACHE_CONTROL)
         .header(ProductController.CACHE_TAGS, "product-" + row.productId())
-        .body(new Availability(row.sku(), Money.vnd(price), level, approx));
+        .body(toAvailability(row, clock, lowThreshold));
+  }
+
+  /** The current price (sale price while a sale runs) and approximate stock level of a SKU. */
+  static Availability toAvailability(AvailabilityRow row, Clock clock, int lowThreshold) {
+    long price = PriceRule.currentPrice(row.variantPrice(), row.sales(), Instant.now(clock));
+    StockLevel level = StockLevel.of(row.quantity(), lowThreshold);
+    Integer approx = level.approxQuantity(row.quantity()).stream().boxed().findFirst().orElse(null);
+    return new Availability(row.sku(), Money.vnd(price), level, approx);
   }
 
   @JsonInclude(JsonInclude.Include.NON_NULL)
