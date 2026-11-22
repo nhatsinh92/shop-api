@@ -89,8 +89,11 @@ owner's `human-approved` label:
   `.redocly.lint-ignore.yaml`, `gradle.properties`, `gradle/wrapper/**`
 - Existing test files (`**/src/test/**` that already exist on `main`): add new tests, never edit,
   weaken or delete existing ones in a feature task
-- Sensitive code: `gateway/**`, `core/src/main/java/com/mayshop/core/auth/**`, any `*Security*`
-  class or `security/` package, and contract major version bumps
+- Contract major version bumps (`merge-gate` needs `human-approved`, no `infra-change`)
+
+Security-sensitive code (`gateway/**`, `core/src/main/java/com/mayshop/core/auth/**`, any
+`*Security*` class or `security/` package) is **not** protected (owner decision 2026-11-22): it merges on
+`agent-approved` and green CI, and the reviewer applies the security checklist in its prompt.
 
 Never add `@Disabled`, `@SuppressWarnings`, `// CHECKSTYLE:OFF`, `spotless:off` or lint ignore
 entries to make a check pass. Fix the code. Never change tests or fixtures so that they pass; if a

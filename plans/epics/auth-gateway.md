@@ -59,7 +59,7 @@ See `docs/handoff/technical-notes.md` § 5 (auth flows) and § 6 (gateway). The 
 | CORS and CSRF | CORS allows only `WEB_ORIGIN` (default `http://localhost:3000`) with credentials. State-changing methods (`POST`, `PUT`, `PATCH`, `DELETE`) are rejected with 403 `AUTH_FORBIDDEN` when `Origin` is present and not `WEB_ORIGIN`, or absent while `Sec-Fetch-Site` is `cross-site`. Together with `SameSite=Lax` this is the CSRF protection. |
 | Errors | Every error the gateway itself produces is `application/problem+json` with a `code` from `errors.yaml` and a `traceId`. |
 | Contract tests | A test helper in `core` that loads the bundled `contracts/dist/core.yaml` and validates MockMvc responses (status, headers, body). Library: `swagger-request-validator-mockmvc`, if its OpenAPI 3.1 support covers our spec (checked in its task); fallback: `networknt` JSON Schema validation of the response schemas. |
-| Sensitive paths | `gateway/**` and `core/src/main/java/com/mayshop/core/auth/**` are sensitive: tasks 4–10 touch them and need the owner's `human-approved` label; tasks 1–3 and 11 do not. |
+| Sensitive paths | `gateway/**` and `core/src/main/java/com/mayshop/core/auth/**` are security-sensitive but merge on `agent-approved` and green CI (owner decision 2026-11-22); the reviewer applies the security checklist. No task of this epic touches a protected path. |
 
 ## Contract impact
 
@@ -104,7 +104,7 @@ neither touches protected paths. Task 11 does not touch protected paths either (
 
 | Risk | Mitigation |
 | --- | --- |
-| Every auth and gateway PR waits for the owner (`human-approved`) | Tasks are small and ordered so that non-sensitive tasks (contract, contract-test helper, infra) run while sensitive PRs wait. |
+| Auth and gateway code merges without an owner review | Every rule has a test with negative cases; the reviewer's security checklist; the Done-when tests run in CI on `main`. |
 | An invalid cookie silently downgrades a signed-in user to a guest on public and optional-auth operations (member price, recommendations, cart) | Access-cookie `Max-Age` equals the token lifetime, so this mostly happens after a key problem, which the `gateway.auth.token.invalid` metric shows; `proxy.ts` and the browser refresh when `logged_in=1` (shop-web Layout + auth epic). |
 | Grace period lets a stolen refresh token be used once more | The window is 10 seconds and only for the token just rotated; reuse after it revokes the session. |
 | Access tokens stay valid after logout for up to 10 minutes | Accepted for the MVP; the optional Redis denylist (Phase 6, owner decision 2) closes the gap. |
