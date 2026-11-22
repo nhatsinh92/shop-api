@@ -39,18 +39,19 @@ dependencies {
 }
 
 // Contract tests read the bundled spec. Bundle it here so `:core:test` works on a clean checkout
-// and in CI. The Redocly CLI version is read from the Makefile so there is one pin.
-val redoclyVersion =
-    Regex("""@redocly/cli@([0-9.]+)""")
-        .find(rootProject.file("Makefile").readText())
-        ?.groupValues
-        ?.get(1)
-        ?: error("Redocly CLI version not found in the Makefile")
-
+// and in CI. The Redocly CLI version is read from the Makefile so there is one pin. It is read only
+// when the task is configured: the Docker build (infra/app.Dockerfile) has no Makefile and never
+// runs the tests, so reading it at configuration time broke `make demo`.
 val contractsDir = rootProject.layout.projectDirectory.dir("contracts")
 
 val bundleContract by tasks.registering(Exec::class) {
     description = "Bundles contracts/openapi/core.yaml into contracts/dist/core.yaml"
+    val redoclyVersion =
+        Regex("""@redocly/cli@([0-9.]+)""")
+            .find(rootProject.file("Makefile").readText())
+            ?.groupValues
+            ?.get(1)
+            ?: error("Redocly CLI version not found in the Makefile")
     inputs.dir(contractsDir.dir("openapi"))
     inputs.property("redoclyVersion", redoclyVersion)
     outputs.file(contractsDir.file("dist/core.yaml"))
