@@ -40,6 +40,17 @@ dependencies {
     testImplementation(libs.networknt.json.schema.validator)
     testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // kafka-clients pulls compression libraries with known vulnerabilities (dependency-audit);
+    // raise them to the fixed releases.
+    constraints {
+        implementation("at.yawk.lz4:lz4-java:1.11.4") {
+            because("fixes GHSA-343h-94h5-c4wr, GHSA-mcr4-qmvw-px4g and others in 1.10.1")
+        }
+        implementation("org.xerial.snappy:snappy-java:1.1.10.9") {
+            because("fixes GHSA-gwq9-9ffj-mvrv, GHSA-q233-g92q-qxp6 and GHSA-xqrx-qh46-34m7")
+        }
+    }
 }
 
 // Contract tests read the bundled spec. Bundle it here so `:core:test` works on a clean checkout

@@ -2,7 +2,7 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :core:dependencies --write-locks
-at.yawk.lz4:lz4-java:1.10.1=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+at.yawk.lz4:lz4-java:1.11.4=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 biz.aQute.bnd:biz.aQute.bnd.annotation:7.1.0=compileClasspath,testCompileClasspath
 ch.qos.logback:logback-classic:1.5.38=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
@@ -212,7 +212,7 @@ org.testcontainers:testcontainers-junit-jupiter:2.0.5=testCompileClasspath,testR
 org.testcontainers:testcontainers-postgresql:2.0.5=testCompileClasspath,testRuntimeClasspath
 org.testcontainers:testcontainers-redpanda:2.0.5=testCompileClasspath,testRuntimeClasspath
 org.testcontainers:testcontainers:2.0.5=testCompileClasspath,testRuntimeClasspath
-org.xerial.snappy:snappy-java:1.1.10.7=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+org.xerial.snappy:snappy-java:1.1.10.9=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.xmlresolver:xmlresolver:6.1.0=checkstyle
 org.xmlunit:xmlunit-core:2.10.4=testCompileClasspath,testRuntimeClasspath
 org.yaml:snakeyaml:2.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
