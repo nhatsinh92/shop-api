@@ -50,12 +50,12 @@ See `docs/handoff/technical-notes.md` § 3 (caching rules, tags, revalidation we
 | Pagination | `listProducts` orders by `created_at DESC, id DESC`; the cursor is base64url JSON of the last item's `(created_at, id)`. A cursor that does not decode → 400 `PAGINATION_CURSOR_INVALID`; an unknown category slug → 200 with an empty page (filters do not 404). |
 | Cache headers | Exactly the contract's: list and detail `public, max-age=120, stale-while-revalidate=600`; availability `public, max-age=5, stale-while-revalidate=10`; flash sale `public, max-age=60, stale-while-revalidate=120`; member price `private, no-store`; recommendations `private`. Tags: list `products`, detail and availability `product-{id}`, flash sale `flash-sale`. Errors carry `Cache-Control: no-store`. |
 | Approximate stock | `OUT_OF_STOCK` at 0, `LOW` at 1–50 (threshold configurable, `PRODUCT_LOW_STOCK_THRESHOLD`), else `IN_STOCK`. `approxQuantity` only when `LOW`, rounded down to a multiple of 10 with a minimum of 1 (design: "còn khoảng 40"). Read from Postgres; peak caching sits in shop-web and the CDN, warm-up is Phase 6. |
-| Flash sale | "Current" is the sale whose window contains now; none → 404 `FLASH_SALE_NONE`. While a sale runs, an item's `price`/`listPrice` stay the regular card prices and `salePrice` is the sale price; `soldPercent = floor(100 × sold / sale stock)`. During the sale, `availability.price` of a sale SKU is the sale price. |
+| Flash sale | "Current" is the sale whose window contains now; none → 404 `FLASH_SALE_NONE`. While a sale runs, an item's `price`/`listPrice` stay the regular card prices and `salePrice` is the sale price; `soldPercent = floor(100 × sold / sale stock)`. During the sale, `availability.price` of a sale SKU is the sale price. A sale covers whole products: when a product is in the sale, every variant SKU of it has a `flash_sale_items` row with the same sale price, and `/flash-sales/current` returns one item per product (its summary SKU, with that SKU's `soldPercent`). Clients match the sale by product `slug`. |
 | Member price | Tier from the access token's `tier` claim (issued by `AccessTokenIssuer` today), read from Spring Security's `JwtAuthenticationToken` of the current request. The `auth` module has no public type for this (its root package holds only `package-info.java`), so `product` imports nothing from `auth` and `core/.../auth/**` is not changed; `ModularityTests` stays green. Base price is the current availability price (the sale price during a flash sale); discounts STANDARD 0 %, SILVER 3 %, GOLD 5 %, PLATINUM 8 %, rounded down to 500 VND (design: GOLD 890.000₫ → 845.500₫). Configurable (owner decision 2). No token → 401 `AUTH_UNAUTHENTICATED`. |
 | Recommendations | Not personalised in the MVP (the contract keeps the shape independent of how items are chosen): with `productSlug`, other products of the same leaf category, then of the parent, newest first; without it, the current flash sale items followed by the newest products; never the product itself; `limit` as in the contract. Unknown `productSlug` → 200 with the fallback list. |
 | Event | `ProductUpdated` (`eventId`, `occurredAt`, `productId`, `sku`, `slug`, `changes` ⊆ `PRICE`, `STOCK`, `DETAIL`, `tags`), published as a Spring application event after commit. `tags` depend on what changed, so stock movements at peak do not flush shared caches: with `PRICE` or `DETAIL` in `changes`, `tags` holds `product-{id}` and `products`, plus `flash-sale` when the SKU is in the current sale; with only `STOCK`, `tags` holds only `product-{id}`. Its JSON shape is part of the contract (see Contract impact). |
 | Externalisation | Spring Modulith event publication registry (JDBC) plus `spring-modulith-events-kafka`: the event goes to topic `product.updated`, key `sku`, JSON. Incomplete publications are resubmitted on restart, so delivery is at least once and consumers deduplicate by `eventId`. The registry table is shared by every module that publishes events (order and checkout later), so it lives in its own schema `modulith` with its own Flyway location `db/migration/modulith` and history table, not in `product`. Dependencies added with `make lock`. |
-| Revalidation webhook | A `product` listener POSTs `{eventId, occurredAt, tags}` to `WEB_REVALIDATE_URL` with header `X-Shop-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>" with REVALIDATE_SECRET>`, timeout 2 s, 3 attempts with backoff, then a warning log and the counter `product.revalidate.failed`. No URL configured → the listener is off (tests and local runs). Events whose `changes` is only `STOCK` are not sent to the webhook (they still go to Redpanda): the web caches availability for seconds, so a stock webhook would only expire the hours-cached product detail on every order at peak. The cache lifetimes on the web side bound staleness when a webhook is lost. |
+| Revalidation webhook | A `product` listener POSTs the `ProductUpdated` event as JSON (the same body as the Redpanda record; the web reads only `tags`) to `WEB_REVALIDATE_URL` with header `X-Shop-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>" with REVALIDATE_SECRET>`, timeout 2 s, 3 attempts with backoff, then a warning log and the counter `product.revalidate.failed`. No URL configured → the listener is off (tests and local runs). Events whose `changes` is only `STOCK` are not sent to the webhook (they still go to Redpanda): the web caches availability for seconds, so a stock webhook would only expire the hours-cached product detail on every order at peak. The cache lifetimes on the web side bound staleness when a webhook is lost. |
 | Triggering changes | `PATCH /internal/products/{sku}` (`x-internal: true`, like the JWKS endpoint) with an optional `price`, `listPrice` and `stock`; it requires `X-Internal-Token` equal to `INTERNAL_API_TOKEN` (no token configured → the operation answers 404) and is never routed by the gateway. Used by tests and `make demo-smoke-product` (owner decision 1). |
 | Sensitive paths | The member-price task reads the `tier` claim from the Spring Security context and does not change `core/.../auth/**`. No task touches a protected path. |
 
@@ -67,7 +67,7 @@ Home artboard (`design/Main.dc.html`, the `flash` list); the ANC Pro also matche
 
 | Product | `price` | `listPrice` | Stock | Flash sale: sale price / sale stock / sold |
 | --- | --- | --- | --- | --- |
-| Tai nghe không dây chống ồn ANC Pro (3 variants, same prices) | 1 290 000 | 1 790 000 | 40 per variant (`LOW`, `approxQuantity` 40) | 890 000 / 100 / 82 |
+| Tai nghe không dây chống ồn ANC Pro (3 variants, same prices, all three in the sale) | 1 290 000 | 1 790 000 | 40 per variant (`LOW`, `approxQuantity` 40) | 890 000 / 100 / 82 per variant |
 | Nồi chiên không dầu 6L màn hình cảm ứng | 1 690 000 | 2 150 000 | 60 | 1 290 000 / 100 / 64 |
 | Áo khoác gió unisex chống nước | 459 000 | 599 000 | 200 | 359 000 / 100 / 47 |
 | Bàn phím cơ 75% hot-swap | 1 390 000 | 1 690 000 | 45 | 1 150 000 / 100 / 91 |
@@ -83,7 +83,7 @@ Every public product operation is already in `core.yaml` (1.1.0). Additive chang
 `1.2.0` in the first task:
 
 - `ProductUpdated` schema, and the revalidation call described as an OpenAPI 3.1 `webhooks` entry
-  `productRevalidate` (body `{eventId, occurredAt, tags}`, header `X-Shop-Signature`, 204 / 401
+  `productRevalidate` (body `ProductUpdated`, header `X-Shop-Signature`, 204 / 400 / 401
   responses), so shop-web types its route handler from the package.
 - `PATCH /internal/products/{sku}` (`x-internal: true`, `security: []` plus the `X-Internal-Token`
   header parameter, problem responses 400 / 404 / 422), as owner decision 1 confirms.
@@ -153,3 +153,10 @@ merged. Tasks 2 and 8 change dependencies or Flyway (`make lock`), none touches 
 3. **Recommendations:** the non-personalised rules above for the MVP. shop-web shows
    recommendations on the home page only (the PDP artboard has none) and drops the "Vì bạn đã xem …"
    line; the `productSlug` rules stay because the contract has the parameter.
+4. **`ProductUpdated` as the webhook body** (2026-11-22, from shop-api#70): Redocly's
+   `no-unused-components` rejects a schema no operation references, and lint ignores are not
+   allowed, so `webhooks.productRevalidate` takes the full `ProductUpdated` as its body instead of
+   `{eventId, occurredAt, tags}`. One schema for the topic and the webhook; the web reads `tags`.
+5. **Flash sale per product** (2026-11-22): all variants of a product in the sale share its sale
+   price (the ANC Pro's three colours all cost 890 000), and the flash sale lists one item per
+   product.
