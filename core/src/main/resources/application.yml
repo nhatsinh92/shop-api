@@ -71,6 +71,11 @@ product:
   low-stock-threshold: ${PRODUCT_LOW_STOCK_THRESHOLD:50}
   # Shown as a card image for a product that has none.
   placeholder-image-url: ${PRODUCT_PLACEHOLDER_IMAGE_URL:https://placehold.co/800x800?text=no-image}
+  revalidate:
+    # shop-web's POST /hooks/revalidate. Blank: no revalidation webhook is sent.
+    url: ${WEB_REVALIDATE_URL:}
+    # Signs the webhook (HMAC-SHA256). Required when the URL is set.
+    secret: ${REVALIDATE_SECRET:}
   member-price:
     # Discount in percent per member tier; the result is rounded down to a multiple of 500 VND.
     discounts:
