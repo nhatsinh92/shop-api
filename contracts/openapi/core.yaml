@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 1.1.0
+  version: 1.2.0
   description: >-
     Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price, recommendations and the checkout reservation, shipping and payment options are specified so far, and order placement and lookup.
     The gateway answers 403 `AUTH_FORBIDDEN` when the `Origin` check fails on a state-changing request and 429 `RATE_LIMITED` when a rate limit is exceeded.
@@ -264,6 +264,102 @@ paths:
           $ref: './errors.yaml#/components/responses/NotFound'
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /internal/products/{sku}:
+    patch:
+      operationId: updateInternalProduct
+      summary: Change the price or stock of a SKU (internal)
+      description: >-
+        Internal operation that changes a SKU's `price`, `listPrice` and/or `stock`, so that a
+        `product.updated` event can be triggered in tests and in the demo (there is no admin UI).
+        The gateway never routes it. It requires the `X-Internal-Token` header to equal the
+        configured `INTERNAL_API_TOKEN`; when no token is configured, or the header is missing or
+        wrong, the operation answers 404 so that its existence is not revealed. A successful
+        change publishes `ProductUpdated` with `changes` derived from the properties that were
+        sent (`PRICE` for `price` or `listPrice`, `STOCK` for `stock`). The response is the
+        updated `Availability` of the SKU (current price and approximate stock level); `listPrice`
+        is not part of it because `Availability` does not carry one.
+      tags: [products]
+      security: []
+      x-internal: true
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            $ref: './errors.yaml#/components/schemas/Sku'
+        - name: X-Internal-Token
+          in: header
+          required: true
+          description: Shared secret of internal callers; must equal `INTERNAL_API_TOKEN`.
+          schema:
+            type: string
+          example: local-internal-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+            examples:
+              price:
+                value:
+                  price:
+                    amount: 790000
+                    currency: VND
+                  listPrice:
+                    amount: 1790000
+                    currency: VND
+              stock:
+                value:
+                  stock: 25
+      responses:
+        '200':
+          description: The change was applied; the updated price and approximate stock level.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+              examples:
+                default:
+                  value:
+                    sku: SKU-ANC-PRO-BLK
+                    price:
+                      amount: 790000
+                      currency: VND
+                    stockLevel: LOW
+                    approxQuantity: 20
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '404':
+          description: >-
+            No product has this SKU, or the `X-Internal-Token` header is missing or wrong, or no
+            internal token is configured.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Product not found
+                    status: 404
+                    code: PRODUCT_NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '422':
+          description: The values are well formed but not acceptable, for example `listPrice` below `price`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Product update invalid
+                    status: 422
+                    code: PRODUCT_UPDATE_INVALID
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
   /api/products:
     get:
       operationId: listProducts
@@ -584,7 +680,7 @@ paths:
                     sku: SKU-ANC-PRO-BLK
                     memberTier: GOLD
                     price:
-                      amount: 804000
+                      amount: 803000
                       currency: VND
         '401':
           $ref: './errors.yaml#/components/responses/Unauthorized'
@@ -1098,6 +1194,78 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+webhooks:
+  productRevalidate:
+    post:
+      operationId: productRevalidate
+      summary: Revalidate cached pages after a product change (webhook sent by core)
+      description: >-
+        Sent by `core` to the web app's `POST /hooks/revalidate` route (URL `WEB_REVALIDATE_URL`)
+        after a `ProductUpdated` event whose `changes` contain `PRICE` or `DETAIL`. Stock-only
+        events are never sent: the web caches availability for seconds, so a stock webhook would
+        only expire product pages on every order at peak. `tags` are the cache tags to revalidate.
+        Delivery is at least once (2 s timeout, 3 attempts with backoff); deduplicate by `eventId`.
+        The receiver verifies `X-Shop-Signature` and rejects a timestamp older than 5 minutes.
+      tags: [products]
+      security: []
+      parameters:
+        - name: X-Shop-Signature
+          in: header
+          required: true
+          description: >-
+            `t=<unix seconds>,v1=<hex HMAC-SHA256>`, where the HMAC is computed with
+            `REVALIDATE_SECRET` over the string `<t>.<raw request body>`.
+          schema:
+            type: string
+            pattern: '^t=[0-9]+,v1=[0-9a-f]{64}$'
+          example: t=1764000000,v1=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdated'
+            examples:
+              price:
+                value:
+                  eventId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  occurredAt: '2026-12-12T00:00:05Z'
+                  productId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  sku: SKU-ANC-PRO-BLK
+                  slug: tai-nghe-khong-day-chong-on-anc-pro
+                  changes: [PRICE]
+                  tags: [product-3fa85f64-5717-4562-b3fc-2c963f66afa6, products, flash-sale]
+      responses:
+        '204':
+          description: The tags were revalidated.
+        '400':
+          description: The body is not a valid `ProductUpdated` event.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Validation failed
+                    status: 400
+                    code: VALIDATION_FAILED
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          description: The signature is missing, malformed, wrong or too old.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Invalid signature
+                    status: 401
+                    code: REVALIDATE_SIGNATURE_INVALID
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
 components:
   securitySchemes:
     cookieAuth:
@@ -1505,6 +1673,61 @@ components:
           type: integer
           minimum: 0
           description: Approximate units left; shown only when stock is low.
+    ProductUpdated:
+      type: object
+      description: >-
+        The JSON value of a record on the Redpanda topic `product.updated` (record key = SKU).
+        Delivery is at least once, so consumers deduplicate by `eventId`. `tags` are the cache tags
+        affected by the change: a change with `PRICE` or `DETAIL` carries `product-{id}` and
+        `products` (plus `flash-sale` when the SKU is in the current flash sale); a change with
+        only `STOCK` carries only `product-{id}`.
+      required: [eventId, occurredAt, productId, sku, slug, changes, tags]
+      properties:
+        eventId:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        occurredAt:
+          type: string
+          format: date-time
+        productId:
+          $ref: './errors.yaml#/components/schemas/Uuid'
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        slug:
+          $ref: './errors.yaml#/components/schemas/Slug'
+        changes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [PRICE, STOCK, DETAIL]
+        tags:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            pattern: '^(products|flash-sale|product-[0-9a-f-]{36})$'
+      examples:
+        - eventId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+          occurredAt: '2026-12-12T00:00:05Z'
+          productId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          sku: SKU-ANC-PRO-BLK
+          slug: tai-nghe-khong-day-chong-on-anc-pro
+          changes: [PRICE]
+          tags: [product-3fa85f64-5717-4562-b3fc-2c963f66afa6, products, flash-sale]
+    UpdateProductRequest:
+      type: object
+      description: At least one property is required.
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        price:
+          $ref: './errors.yaml#/components/schemas/Money'
+        listPrice:
+          $ref: './errors.yaml#/components/schemas/Money'
+        stock:
+          type: integer
+          minimum: 0
     Health:
       type: object
       required: [status]
