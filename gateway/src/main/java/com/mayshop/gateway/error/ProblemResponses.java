@@ -37,6 +37,11 @@ public final class ProblemResponses {
     return write(exchange, HttpStatus.FORBIDDEN, "Forbidden", "AUTH_FORBIDDEN", null);
   }
 
+  /** Answers 404 {@code NOT_FOUND}. */
+  public static Mono<Void> notFound(ServerWebExchange exchange) {
+    return write(exchange, HttpStatus.NOT_FOUND, "Not found", "NOT_FOUND", null);
+  }
+
   static Mono<Void> write(
       ServerWebExchange exchange, HttpStatus status, String title, String code, Throwable error) {
     ServerHttpResponse response = exchange.getResponse();
