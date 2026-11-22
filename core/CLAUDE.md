@@ -32,6 +32,33 @@ Rules:
 - `./gradlew :core:test` (Testcontainers Postgres; needs Docker)
 - `./gradlew :core:bootRun` (expects Postgres from `make demo` on :5432)
 
+## Contract tests
+
+Every endpoint has a contract test that validates the real response against the spec.
+`./gradlew :core:test` bundles `contracts/openapi/core.yaml` into `contracts/dist/core.yaml` first
+(task `bundleContract`, Redocly version read from the `Makefile`), so no manual step is needed.
+
+```java
+@Autowired private MockMvc mvc;
+
+@Test
+void listProductsMatchesTheContract() throws Exception {
+  var response = mvc.perform(get("/api/products").accept(MediaType.APPLICATION_JSON))
+      .andReturn().getResponse();
+  ContractValidator.core().assertValid(response, "listProducts"); // operationId from core.yaml
+}
+```
+
+- Package `com.mayshop.core.contract` (test sources). It checks the status (documented code, range
+  or `default`), the `Content-Type` (for example `application/problem+json`), required headers and
+  the JSON body against the schema (JSON Schema 2020-12, so OpenAPI 3.1 `type: [x, 'null']` works).
+- Test the error responses of your endpoint too, each with its own `operationId` call.
+- Send an `Accept: application/json` header on actuator endpoints, which otherwise answer with a
+  vendor media type.
+- Use `ContractValidator.validate(response, operationId)` to get the violations as a list.
+- Why not `swagger-request-validator`: it loads the 3.1 bundle but ignores `type: [x, 'null']`
+  (a number passed for `nextCursor`), so it cannot check our 3.1 schemas.
+
 ## May change / must not change
 
 - May change: the module named by the issue's `area:*` label, plus its tests.

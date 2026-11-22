@@ -27,5 +27,32 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation(libs.archunit.junit5)
+    testImplementation(libs.networknt.json.schema.validator)
+    testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// Contract tests read the bundled spec. Bundle it here so `:core:test` works on a clean checkout
+// and in CI. The Redocly CLI version is read from the Makefile so there is one pin.
+val redoclyVersion =
+    Regex("""@redocly/cli@([0-9.]+)""")
+        .find(rootProject.file("Makefile").readText())
+        ?.groupValues
+        ?.get(1)
+        ?: error("Redocly CLI version not found in the Makefile")
+
+val contractsDir = rootProject.layout.projectDirectory.dir("contracts")
+
+val bundleContract by tasks.registering(Exec::class) {
+    description = "Bundles contracts/openapi/core.yaml into contracts/dist/core.yaml"
+    inputs.dir(contractsDir.dir("openapi"))
+    inputs.property("redoclyVersion", redoclyVersion)
+    outputs.file(contractsDir.file("dist/core.yaml"))
+    workingDir = contractsDir.asFile
+    commandLine("npx", "--yes", "@redocly/cli@$redoclyVersion", "bundle", "openapi/core.yaml", "-o", "dist/core.yaml")
+}
+
+tasks.test {
+    dependsOn(bundleContract)
+    systemProperty("contract.core.spec", contractsDir.file("dist/core.yaml").asFile.absolutePath)
 }
