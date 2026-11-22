@@ -15,7 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** {@link CatalogQueries} on the {@code product} schema. */
 @Repository
-class JdbcCatalogQueries implements CatalogQueries {
+class JdbcCatalogQueries implements CatalogQueries, RecommendationQueries {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final TypeReference<List<OptionRow>> OPTIONS = new TypeReference<>() {};
@@ -23,7 +23,7 @@ class JdbcCatalogQueries implements CatalogQueries {
   /** The summary variant of a product is the one with the lowest position. */
   private static final String CARD_SELECT =
       """
-      select p.id, p.slug, p.name, p.created_at, v.sku, v.price, v.list_price,
+      select p.id, p.slug, p.name, p.created_at, p.category_slug, v.sku, v.price, v.list_price,
              (select i.url from product.images i
                where i.product_id = p.id order by i.position limit 1) as image_url
         from product.products p
@@ -56,6 +56,40 @@ class JdbcCatalogQueries implements CatalogQueries {
     sql.append(" order by p.created_at desc, p.id desc limit ?");
     params.add(limit);
     return jdbc.sql(sql.toString()).params(params).query(this::card).list();
+  }
+
+  @Override
+  public Optional<List<CardRow>> relatedTo(String productSlug, int limit) {
+    Optional<String> category =
+        jdbc.sql("select category_slug from product.products where slug = ?")
+            .param(productSlug)
+            .query(String.class)
+            .optional();
+    if (category.isEmpty()) {
+      return Optional.empty();
+    }
+    String sql =
+        """
+        with recursive parent(slug) as (
+          select coalesce(
+                   (select parent_slug from product.categories where slug = ?), ?)),
+        subtree(slug) as (
+          select slug from parent
+          union all
+          select c.slug from product.categories c join subtree t on c.parent_slug = t.slug)
+        select * from (
+        """
+            + CARD_SELECT
+            + """
+            where p.slug <> ? and p.category_slug in (select slug from subtree)) related
+            order by (case when category_slug = ? then 0 else 1 end), created_at desc, id desc
+            limit ?
+            """;
+    return Optional.of(
+        jdbc.sql(sql)
+            .params(category.get(), category.get(), productSlug, category.get(), limit)
+            .query(this::card)
+            .list());
   }
 
   @Override

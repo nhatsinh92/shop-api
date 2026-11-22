@@ -20,7 +20,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
       ProductController.class,
       AvailabilityController.class,
       FlashSaleController.class,
-      MemberPriceController.class
+      MemberPriceController.class,
+      RecommendationController.class
     })
 class ProductExceptionHandler {
 
@@ -40,6 +41,23 @@ class ProductExceptionHandler {
                 "VALIDATION_FAILED",
                 "message",
                 "must be between 1 and " + ProductController.MAX_LIMIT)));
+    return response(HttpStatus.BAD_REQUEST, body);
+  }
+
+  @ExceptionHandler(InvalidRecommendationLimitException.class)
+  ResponseEntity<Map<String, Object>> invalidRecommendationLimit() {
+    Map<String, Object> body =
+        body(HttpStatus.BAD_REQUEST, "Validation failed", "VALIDATION_FAILED");
+    body.put(
+        "errors",
+        List.of(
+            Map.of(
+                "field",
+                "limit",
+                "code",
+                "VALIDATION_FAILED",
+                "message",
+                "must be between 1 and " + RecommendationController.MAX_LIMIT)));
     return response(HttpStatus.BAD_REQUEST, body);
   }
 
