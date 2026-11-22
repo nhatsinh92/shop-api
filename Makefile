@@ -60,6 +60,7 @@ lock: ## Refresh gradle.lockfile after changing dependencies
 test-scripts: ## Tests for the orchestration scripts (needs jq)
 	bash scripts/tests/picker.test.sh
 	bash scripts/tests/claim.test.sh
+	bash scripts/tests/heartbeat.test.sh
 	bash contracts/scripts/check-breaking.test.sh
 
 BASE ?= origin/main
