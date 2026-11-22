@@ -8,7 +8,6 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -65,10 +64,7 @@ class ProductUpdatedResubmissionTest {
               "slug",
               List.of(ProductUpdated.Change.PRICE),
               List.of("products"));
-      first
-          .getBean(TransactionTemplate.class)
-          .executeWithoutResult(
-              s -> first.getBean(ApplicationEventPublisher.class).publishEvent(event));
+      first.getBean(TransactionTemplate.class).executeWithoutResult(s -> first.publishEvent(event));
       Thread.sleep(3000);
       assertThat(
               jdbc.sql(

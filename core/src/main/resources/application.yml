@@ -18,11 +18,10 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      # Modulith hands the externalised event over already serialised as JSON.
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       # Wait for the broker's acknowledgement; the registry resubmits what was not confirmed.
       acks: all
-      properties:
-        spring.json.add.type.headers: false
   modulith:
     events:
       jdbc:
