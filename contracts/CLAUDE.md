@@ -14,6 +14,10 @@ Services implement them; `shop-web` generates its types and mocks from the relea
   `InternalError`) and the error-code catalogue `x-error-codes`.
 - `scripts/check-conventions.mjs`: the convention check (see Rules); `check-conventions.test.mjs`
   holds its fixture tests (`node --test`).
+- `scripts/check-bundle.mjs`: fails when a bundled spec in `dist/` has a `$ref` that is not a local
+  `#/` reference; `check-bundle.test.mjs` holds its fixture tests.
+- `dist/` (git-ignored): self-contained `core.yaml` and `cart.yaml`, produced by the package's
+  `prepack` script (`make bundle-contract` runs the same bundling, the `$ref` check and a lint).
 - `package.json`: the package `@shop/api-contract`. Its `version` is the contract version.
 
 ## Versioning and release
@@ -29,7 +33,10 @@ Services implement them; `shop-web` generates its types and mocks from the relea
   `scripts/check-breaking.sh`, tested by `scripts/check-breaking.test.sh` (fixtures in
   `scripts/fixtures/breaking/`, run by `make test-scripts`). Run it locally with
   `make contract-breaking BASE=<ref>` (default `origin/main`; needs Docker).
-- On `main`, the `contract-publish` workflow runs `npm pack` and creates the GitHub Release
+- The tarball contains the `openapi/` sources and the bundled `dist/core.yaml` and `dist/cart.yaml`
+  (`exports` lists both). `shop-web` generates types from the bundled files, because generators
+  cannot follow cross-file `$ref`s.
+- On `main`, the `contract-publish` workflow runs `npm pack` (which runs `prepack`) and creates the GitHub Release
   `contract-v<version>` with the tarball attached when that release does not exist yet.
   `shop-web` pins the tarball URL:
   `https://github.com/nhatsinh92/shop-api/releases/download/contract-v<version>/shop-api-contract-<version>.tgz`

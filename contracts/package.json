@@ -1,6 +1,6 @@
 {
   "name": "@shop/api-contract",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "OpenAPI contract for the shop-api services (source of truth for shop-web).",
   "license": "UNLICENSED",
   "repository": {
@@ -9,12 +9,19 @@
     "directory": "contracts"
   },
   "files": [
-    "openapi/"
+    "openapi/",
+    "dist/"
   ],
   "exports": {
     "./openapi/core.yaml": "./openapi/core.yaml",
     "./openapi/cart.yaml": "./openapi/cart.yaml",
     "./openapi/errors.yaml": "./openapi/errors.yaml",
+    "./dist/core.yaml": "./dist/core.yaml",
+    "./dist/cart.yaml": "./dist/cart.yaml",
     "./package.json": "./package.json"
+  },
+  "scripts": {
+    "bundle": "npx --yes @redocly/cli@2.82.0 bundle openapi/core.yaml -o dist/core.yaml && npx --yes @redocly/cli@2.82.0 bundle openapi/cart.yaml -o dist/cart.yaml && node scripts/check-bundle.mjs",
+    "prepack": "npm run bundle"
   }
 }
