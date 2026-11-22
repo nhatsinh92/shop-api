@@ -44,6 +44,18 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
 - Denials are 429 `RATE_LIMITED` problems with `Retry-After` (`ProblemResponses`). Settings:
   `REDIS_HOST`, `REDIS_PORT`.
 
+## CORS and Origin check (`com.mayshop.gateway.origin`)
+
+- `OriginFilter` is a `WebFilter` at highest precedence, so it runs before every gateway filter
+  (rejected requests consume no rate-limit tokens and never reach an upstream).
+- CORS: only `WEB_ORIGIN` (default `http://localhost:3000`, property `gateway.web-origin`) gets
+  `Access-Control-Allow-Origin` and `Allow-Credentials: true`; never a wildcard. Preflights answer 204
+  in the gateway; other origins get no CORS headers.
+- `POST`, `PUT`, `PATCH`, `DELETE` get 403 `AUTH_FORBIDDEN` when `Origin` is present and not exactly
+  `WEB_ORIGIN` (including `null`), or absent with `Sec-Fetch-Site: cross-site`. No `Origin` and no
+  `Sec-Fetch-Site` (server-side callers such as shop-web `proxy.ts`) passes. `GET`, `HEAD`, `OPTIONS`
+  are never rejected.
+
 ## Commands
 
 - `./gradlew :gateway:test`

@@ -33,6 +33,9 @@ gateway:
     # core is down. Only /api/** is routed; /.well-known/** is never exposed.
     jwks-uri: ${CORE_URL:http://localhost:8081}/.well-known/jwks.json
 
+  # The only origin allowed to make credentialed cross-origin calls and state-changing requests.
+  web-origin: ${WEB_ORIGIN:http://localhost:3000}
+
   rate-limit:
     login-per-email-per-minute: ${GATEWAY_LOGIN_PER_EMAIL_PER_MINUTE:5}
     login-per-ip-per-minute: ${GATEWAY_LOGIN_PER_IP_PER_MINUTE:60}
