@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Problem details for the product endpoints; every error response is {@code no-store}. */
-@RestControllerAdvice(assignableTypes = ProductController.class)
+@RestControllerAdvice(assignableTypes = {ProductController.class, AvailabilityController.class})
 class ProductExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(ProductExceptionHandler.class);
