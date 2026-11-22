@@ -19,7 +19,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
     assignableTypes = {
       ProductController.class,
       AvailabilityController.class,
-      FlashSaleController.class
+      FlashSaleController.class,
+      MemberPriceController.class
     })
 class ProductExceptionHandler {
 
