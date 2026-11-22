@@ -15,7 +15,12 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Problem details for the product endpoints; every error response is {@code no-store}. */
-@RestControllerAdvice(assignableTypes = {ProductController.class, AvailabilityController.class})
+@RestControllerAdvice(
+    assignableTypes = {
+      ProductController.class,
+      AvailabilityController.class,
+      FlashSaleController.class
+    })
 class ProductExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(ProductExceptionHandler.class);
@@ -48,6 +53,13 @@ class ProductExceptionHandler {
   ResponseEntity<Map<String, Object>> notFound() {
     return response(
         HttpStatus.NOT_FOUND, body(HttpStatus.NOT_FOUND, "Product not found", "PRODUCT_NOT_FOUND"));
+  }
+
+  @ExceptionHandler(FlashSaleNoneException.class)
+  ResponseEntity<Map<String, Object>> noFlashSale() {
+    return response(
+        HttpStatus.NOT_FOUND,
+        body(HttpStatus.NOT_FOUND, "No flash sale is running", "FLASH_SALE_NONE"));
   }
 
   /** Anything unexpected: a problem response instead of a container error page. */
