@@ -26,3 +26,7 @@ Passwords are stored as BCrypt hashes with cost 12.
 `users.sql` needs `auth.users`, so the `seed` compose service waits until `core` is healthy.
 `make seed` therefore works on its own: it starts `postgres` and `core` if they are not running yet.
 `make demo-smoke-auth` logs in as `linh@example.com` from the table above.
+
+`make demo-smoke-product` reads the ANC Pro (`tai-nghe-khong-day-anc-pro`, three variants, stock 40
+each, flash sale price 890 000) and changes the price of `SKU-MOUSE-SIL` (not in the sale), so run `make seed` to
+restore the catalog after it.
