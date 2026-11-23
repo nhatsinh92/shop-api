@@ -31,6 +31,15 @@ class JdbcCatalogQueries implements CatalogQueries, RecommendationQueries {
                        where product_id = p.id order by position limit 1) v on true
       """;
 
+  /** The slugs of a category and all its descendants, as the CTE {@code subtree}. */
+  private static final String CATEGORY_SUBTREE =
+      """
+      with recursive subtree(slug) as (
+        select slug from product.categories where slug = ?
+        union all
+        select c.slug from product.categories c join subtree t on c.parent_slug = t.slug)
+      """;
+
   private final JdbcClient jdbc;
   private final String placeholderImageUrl;
 
@@ -42,11 +51,16 @@ class JdbcCatalogQueries implements CatalogQueries, RecommendationQueries {
 
   @Override
   public List<CardRow> page(String category, PageKey after, int limit) {
-    StringBuilder sql = new StringBuilder(CARD_SELECT).append(" where true");
+    StringBuilder sql = new StringBuilder();
     List<Object> params = new ArrayList<>();
     if (category != null) {
-      sql.append(" and p.category_slug = ?");
+      // The filter covers the category and all its descendants.
+      sql.append(CATEGORY_SUBTREE);
       params.add(category);
+    }
+    sql.append(CARD_SELECT).append(" where true");
+    if (category != null) {
+      sql.append(" and p.category_slug in (select slug from subtree)");
     }
     if (after != null) {
       sql.append(" and (p.created_at, p.id) < (?, ?)");
