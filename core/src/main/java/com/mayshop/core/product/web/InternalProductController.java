@@ -3,9 +3,6 @@ package com.mayshop.core.product.web;
 import com.mayshop.core.product.persistence.AvailabilityQueries;
 import com.mayshop.core.product.update.ProductUpdates;
 import com.mayshop.core.product.update.ProductUpdates.Request;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 @RestController
 class InternalProductController {
 
-  static final String TOKEN_HEADER = "X-Internal-Token";
+  static final String TOKEN_HEADER = InternalToken.HEADER;
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -35,19 +32,19 @@ class InternalProductController {
   private final AvailabilityQueries availability;
   private final Clock clock;
   private final int lowThreshold;
-  private final byte[] tokenDigest;
+  private final InternalToken token;
 
   InternalProductController(
       ProductUpdates updates,
       AvailabilityQueries availability,
       ObjectProvider<Clock> clock,
       @Value("${product.low-stock-threshold}") int lowThreshold,
-      @Value("${product.internal.api-token:}") String token) {
+      InternalToken token) {
     this.updates = updates;
     this.availability = availability;
     this.clock = clock.getIfAvailable(Clock::systemUTC);
     this.lowThreshold = lowThreshold;
-    this.tokenDigest = token == null || token.isBlank() ? null : digest(token);
+    this.token = token;
   }
 
   @PatchMapping(
@@ -56,9 +53,9 @@ class InternalProductController {
   @Transactional
   ResponseEntity<AvailabilityController.Availability> updateInternalProduct(
       @PathVariable String sku,
-      @RequestHeader(value = TOKEN_HEADER, required = false) String token,
+      @RequestHeader(value = TOKEN_HEADER, required = false) String given,
       @RequestBody(required = false) String body) {
-    if (!tokenMatches(token)) {
+    if (!token.matches(given)) {
       throw new ProductNotFoundException();
     }
     updates.update(sku, parse(body));
@@ -66,22 +63,6 @@ class InternalProductController {
     return ResponseEntity.ok()
         .header("Cache-Control", "no-store")
         .body(AvailabilityController.toAvailability(row, clock, lowThreshold));
-  }
-
-  private boolean tokenMatches(String given) {
-    if (tokenDigest == null || given == null) {
-      return false;
-    }
-    // Digests have equal length whatever the input, and isEqual compares in constant time.
-    return MessageDigest.isEqual(tokenDigest, digest(given));
-  }
-
-  private static byte[] digest(String value) {
-    try {
-      return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 
   /** Validates the body against {@code UpdateProductRequest}; any violation is a 400. */

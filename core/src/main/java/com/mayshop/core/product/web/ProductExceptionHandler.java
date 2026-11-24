@@ -24,7 +24,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
       FlashSaleController.class,
       MemberPriceController.class,
       RecommendationController.class,
-      InternalProductController.class
+      InternalProductController.class,
+      InternalProductLookupController.class
     })
 class ProductExceptionHandler {
 
