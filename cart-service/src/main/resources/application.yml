@@ -42,3 +42,6 @@ product:
     internal-token: ${INTERNAL_API_TOKEN:}
     timeout: ${PRODUCT_LOOKUP_TIMEOUT:150ms}
     cache-ttl: 60s
+
+cart:
+  placeholder-image-url: ${CART_PLACEHOLDER_IMAGE_URL:http://localhost:3000/images/cart-placeholder.svg}

@@ -1,5 +1,6 @@
 package com.mayshop.cart.web;
 
+import com.mayshop.cart.product.ProductLookupException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,18 @@ class CartExceptionHandler {
   ResponseEntity<Map<String, Object>> redisUnavailable(Exception e) {
     LOG.warn("Redis is unavailable: {}", e.toString());
     return problem(HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable", "SERVICE_UNAVAILABLE");
+  }
+
+  @ExceptionHandler(ProductLookupException.class)
+  ResponseEntity<Map<String, Object>> lookupUnavailable(ProductLookupException e) {
+    LOG.warn("Product lookup is unavailable: {}", e.toString());
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .header(HttpHeaders.RETRY_AFTER, String.valueOf(ProductLookupException.RETRY_AFTER_SECONDS))
+        .body(
+            Problems.body(
+                HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable", "SERVICE_UNAVAILABLE"));
   }
 
   private static ResponseEntity<Map<String, Object>> problem(
