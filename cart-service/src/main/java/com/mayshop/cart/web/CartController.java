@@ -7,6 +7,7 @@ import com.mayshop.cart.security.GuestCartCookies;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -77,6 +78,32 @@ class CartController {
   @DeleteMapping("/items/{sku}")
   ResponseEntity<CartView.Cart> removeCartItem(CallerIdentity identity, @PathVariable String sku) {
     return ok(writes.remove(existingKey(identity), sku(sku)));
+  }
+
+  /**
+   * Merges the guest cart into the user cart after login and clears {@code guest_cart}. Without the
+   * cookie the user cart is returned unchanged; a malformed or unknown id changes nothing but the
+   * cookie is still cleared.
+   */
+  @PostMapping("/merge")
+  ResponseEntity<CartView.Cart> mergeGuestCart(
+      CallerIdentity identity,
+      @CookieValue(name = GuestCartCookies.NAME, required = false) String rawGuestCookie) {
+    if (!(identity instanceof CallerIdentity.User user)) {
+      throw CartProblemException.unauthenticated();
+    }
+    CartKey userKey = CartKey.forUser(user.id());
+    if (rawGuestCookie == null) {
+      return ok(reads.cart(identity));
+    }
+    CartView.Cart cart =
+        user.guestId() == null
+            ? reads.cart(identity)
+            : writes.merge(userKey, CartKey.forGuest(user.guestId()));
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
+        .header(HttpHeaders.SET_COOKIE, guestCookies.clearCookie())
+        .body(cart);
   }
 
   /** The key of a cart that must already exist: a guest without a cookie has none (404). */

@@ -54,6 +54,11 @@ final class CartProblemException extends RuntimeException {
         "A cart holds at most " + limit + " distinct SKUs.");
   }
 
+  static CartProblemException unauthenticated() {
+    return new CartProblemException(
+        HttpStatus.UNAUTHORIZED, "Unauthenticated", "AUTH_UNAUTHENTICATED", null, null);
+  }
+
   static CartProblemException validation() {
     return new CartProblemException(
         HttpStatus.BAD_REQUEST, "Validation failed", "VALIDATION_FAILED", null, null);
