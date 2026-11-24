@@ -22,4 +22,8 @@ revoked refresh token and the `Origin` check through the gateway (`infra/smoke-a
 sale), then changes a price directly on `core` through `PATCH /internal/products/{sku}`, checks that
 the `product.updated` record arrives and that the gateway does not route the internal operation
 (`infra/smoke-product.sh --help`).
+`make demo-smoke-cart` runs the seven cart operations through the gateway as a guest, checks the 401 for
+an expired session, then logs in, merges the guest cart and checks that the `cart_snapshot` row in the
+`cart` database has the version of the last write (`infra/smoke-cart.sh --help`). The `cart` database
+and role are created by the one-shot `cart-db` service, on a fresh or an existing volume.
 The demo accounts are listed in `seed/README.md`. Stop the stack with `make demo-down`.

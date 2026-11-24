@@ -18,7 +18,7 @@ COMPOSE := AUTH_JWT_PRIVATE_KEY="$$(cat $(DEMO_KEY) 2>/dev/null || true)" \
 	docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product seed lock test-scripts contract-breaking
+.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart seed lock test-scripts contract-breaking
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -85,6 +85,9 @@ demo-smoke-auth: ## Login, me, refresh, logout through the gateway of a running 
 
 demo-smoke-product: ## List, detail, availability, internal change and product.updated event of a running demo
 	bash infra/smoke-product.sh
+
+demo-smoke-cart: ## Guest and signed-in cart operations, merge and cart snapshot of a running demo
+	bash infra/smoke-cart.sh
 
 lock: ## Refresh gradle.lockfile after changing dependencies
 	$(GRADLE) resolveAndLockAll --write-locks

@@ -67,13 +67,32 @@ services:
       timeout: 3s
       retries: 20
 
-  # Creates the product.updated topic (idempotent) before core publishes to it, then exits.
+  # Creates the cart database and its owner role (idempotent, works on a fresh and on an existing
+  # pgdata volume), then exits. cart-service runs its Flyway migration as that role.
+  cart-db:
+    image: postgres:18-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: shop
+      PGPASSWORD: shop
+      PGDATABASE: shop
+    volumes: ["./cart-db-init.sh:/cart-db-init.sh:ro"]
+    entrypoint: ["sh", "/cart-db-init.sh"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  # Creates the product.updated and cart.updated topics (idempotent) before core and cart-service
+  # publish to them, then exits.
   topics:
     image: redpandadata/redpanda:v26.1.21
     entrypoint:
       - sh
       - -c
-      - rpk -X brokers=redpanda:9092 topic describe product.updated >/dev/null 2>&1 || rpk -X brokers=redpanda:9092 topic create product.updated
+      - |
+        for t in product.updated cart.updated; do
+          rpk -X brokers=redpanda:9092 topic describe $$t >/dev/null 2>&1 || rpk -X brokers=redpanda:9092 topic create $$t
+        done
     depends_on:
       redpanda: { condition: service_healthy }
     restart: "no"
@@ -124,8 +143,19 @@ services:
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       CORE_URL: http://core:8081
+      # Same generated secret as core (infra/.secrets/internal-api-token).
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:-mayshop-core}
+      AUTH_JWT_AUDIENCE: ${AUTH_JWT_AUDIENCE:-mayshop}
+      CART_DB_URL: jdbc:postgresql://postgres:5432/cart
+      CART_DB_USER: cart
+      CART_DB_PASSWORD: cart # local demo only
     ports: ["8082:8082"]
     depends_on:
+      core: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      cart-db: { condition: service_completed_successfully }
+      topics: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
       redpanda: { condition: service_healthy }
     healthcheck:
