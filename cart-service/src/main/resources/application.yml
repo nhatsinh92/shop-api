@@ -9,8 +9,28 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  # Used only by the write-behind consumer (package writebehind.store); no request path touches it.
+  # The pool connects lazily, so Postgres being down never stops the service from starting.
+  datasource:
+    url: ${CART_DB_URL:jdbc:postgresql://localhost:5432/cart}
+    username: ${CART_DB_USER:cart}
+    password: ${CART_DB_PASSWORD:cart}
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 0
+      connection-timeout: 3000
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        # The send runs on its own thread; a stopped broker only delays that thread.
+        max.block.ms: 2000
+        delivery.timeout.ms: 10000
+        request.timeout.ms: 5000
     consumer:
       group-id: cart-service
       # Events only matter from now on: a missed one is covered by the 60 s TTL.
@@ -19,6 +39,10 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 management:
+  health:
+    # Neither Postgres nor the broker takes the service out of rotation.
+    db:
+      enabled: false
   endpoints:
     web:
       exposure:
