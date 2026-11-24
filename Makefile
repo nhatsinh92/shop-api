@@ -18,10 +18,10 @@ COMPOSE := AUTH_JWT_PRIVATE_KEY="$$(cat $(DEMO_KEY) 2>/dev/null || true)" \
 	docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart seed lock test-scripts contract-breaking
+.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart demo-k6-cart seed lock test-scripts contract-breaking
 
 help: ## Show targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
 
 test: ## Unit + integration tests (Testcontainers; needs Docker), Modulith and ArchUnit checks
 	$(GRADLE) test
@@ -88,6 +88,10 @@ demo-smoke-product: ## List, detail, availability, internal change and product.u
 
 demo-smoke-cart: ## Guest and signed-in cart operations, merge and cart snapshot of a running demo
 	bash infra/smoke-cart.sh
+
+demo-k6-cart: ## k6 cart load (50 VUs, 60 s) through the gateway of a running demo; fails at p95 >= 50 ms or errors >= 1 %
+	DEMO_USERS="$$(grep -Eo '`[a-z]+@example\.com` \| `[a-z]+-[a-z]+-[0-9]{4}`' seed/README.md | sed -e 's/`//g' -e 's/ | /:/' | paste -sd, -)" \
+	$(COMPOSE) --profile peak run --rm --no-deps -e DEMO_USERS k6 run /scripts/cart.js
 
 lock: ## Refresh gradle.lockfile after changing dependencies
 	$(GRADLE) resolveAndLockAll --write-locks
