@@ -9,6 +9,15 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: cart-service
+      # Events only matter from now on: a missed one is covered by the 60 s TTL.
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
 management:
   endpoints:
     web:
@@ -26,3 +35,10 @@ auth:
     jwks-uri: ${CORE_URL:http://localhost:8081}/.well-known/jwks.json
     jwks-connect-timeout: 1s
     jwks-read-timeout: 2s
+
+product:
+  lookup:
+    core-url: ${CORE_URL:http://localhost:8081}
+    internal-token: ${INTERNAL_API_TOKEN:}
+    timeout: ${PRODUCT_LOOKUP_TIMEOUT:150ms}
+    cache-ttl: 60s
