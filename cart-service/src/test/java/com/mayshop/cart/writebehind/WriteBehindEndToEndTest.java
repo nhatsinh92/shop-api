@@ -127,6 +127,7 @@ class WriteBehindEndToEndTest {
 
     await()
         .atMost(Duration.ofSeconds(60))
+        .ignoreExceptions()
         .untilAsserted(() -> assertThat(storedVersion(key)).isEqualTo(2L));
 
     // A replayed older record and a duplicate of the current one leave the row unchanged.
@@ -138,6 +139,7 @@ class WriteBehindEndToEndTest {
     kafka.send("cart.updated", "cart:sentinel", older.replace(key, "cart:sentinel"));
     await()
         .atMost(Duration.ofSeconds(60))
+        .ignoreExceptions()
         .untilAsserted(() -> assertThat(storedVersion("cart:sentinel")).isNotNull());
     assertThat(storedVersion(key)).isEqualTo(2L);
     assertThat(
@@ -152,6 +154,7 @@ class WriteBehindEndToEndTest {
     call("DELETE", "/api/cart/items/SKU-B", null, guest);
     await()
         .atMost(Duration.ofSeconds(60))
+        .ignoreExceptions()
         .untilAsserted(() -> assertThat(storedVersion(key)).isNull());
   }
 }
