@@ -36,6 +36,24 @@ be cheap, bounded and observable.
   (`web/Problems`, `CartExceptionHandler`); Redis connection failures are 503 `SERVICE_UNAVAILABLE`.
 - Contract tests use `ContractValidator.cart()` (spec bundled by the `bundleContract` Gradle task).
 
+## Write-behind (package `writebehind/`)
+
+- Every successful add, update, remove and merge sends a `CartUpdated` JSON record to topic
+  `cart.updated` (key = cart key, value `{cartKey, version, updatedAt, items: [{sku, quantity,
+  addedAt}]}`) from the snapshot the Lua script returned; merge also sends an empty snapshot for the
+  guest key. `CartUpdatedPublisher` hands the send to one bounded worker thread (`acks=all`), so the
+  request never waits on the broker; a failed or dropped send is logged and counted as
+  `cart.write_behind.failed`.
+- `writebehind/store/` is the only package that may use JDBC or Flyway (ArchUnit rule
+  `WriteBehindBoundariesTest`). The consumer (group `cart-writer`, `earliest`, endless retry with
+  exponential backoff) upserts into `cart_snapshot(cart_key, version, items jsonb, updated_at)` only
+  when the version is higher, and deletes the row for an empty cart. A late record that carries a
+  lower version for an emptied cart can recreate its row; the next write or the Phase 6 cleanup
+  repairs it.
+- Flyway (`db/migration`) runs from `CartSnapshotStore` on the first write, not at start-up, so
+  Postgres being down never stops the service. Database settings: `CART_DB_URL`, `CART_DB_USER`,
+  `CART_DB_PASSWORD`. Health: neither Postgres nor Kafka is part of readiness.
+
 ## Commands
 
 - `./gradlew :cart-service:test` (Testcontainers Redis; needs Docker)

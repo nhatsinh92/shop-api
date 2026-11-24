@@ -4,7 +4,9 @@ import com.mayshop.cart.product.ProductInfo;
 import com.mayshop.cart.product.ProductLookupService;
 import com.mayshop.cart.repository.CartKey;
 import com.mayshop.cart.repository.CartRepository;
+import com.mayshop.cart.repository.CartSnapshot;
 import com.mayshop.cart.repository.WriteResult;
+import com.mayshop.cart.writebehind.CartUpdatedPublisher;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
@@ -20,11 +22,17 @@ class CartWriteService {
   private final CartRepository carts;
   private final ProductLookupService products;
   private final CartReadService reads;
+  private final CartUpdatedPublisher updates;
 
-  CartWriteService(CartRepository carts, ProductLookupService products, CartReadService reads) {
+  CartWriteService(
+      CartRepository carts,
+      ProductLookupService products,
+      CartReadService reads,
+      CartUpdatedPublisher updates) {
     this.carts = carts;
     this.products = products;
     this.reads = reads;
+    this.updates = updates;
   }
 
   /**
@@ -39,7 +47,7 @@ class CartWriteService {
     if (OUT_OF_STOCK.equals(info.stockLevel())) {
       throw CartProblemException.outOfStock();
     }
-    return respond(carts.add(key, sku, quantity));
+    return respond(key, carts.add(key, sku, quantity));
   }
 
   CartView.Cart update(CartKey key, String sku, int quantity) {
@@ -49,11 +57,11 @@ class CartWriteService {
     if (info != null && OUT_OF_STOCK.equals(info.stockLevel())) {
       throw CartProblemException.outOfStock();
     }
-    return respond(carts.set(key, sku, quantity));
+    return respond(key, carts.set(key, sku, quantity));
   }
 
   CartView.Cart remove(CartKey key, String sku) {
-    return respond(carts.remove(key, sku));
+    return respond(key, carts.remove(key, sku));
   }
 
   /**
@@ -64,12 +72,17 @@ class CartWriteService {
    *     it is down (the merge has already happened and is idempotent)
    */
   CartView.Cart merge(CartKey user, CartKey guest) {
-    return reads.cart(carts.merge(user, guest).snapshot());
+    CartSnapshot merged = carts.merge(user, guest).snapshot();
+    updates.publishMerge(user, merged, guest);
+    return reads.cart(merged);
   }
 
-  private CartView.Cart respond(WriteResult result) {
+  private CartView.Cart respond(CartKey key, WriteResult result) {
     return switch (result.status()) {
-      case OK -> reads.cart(result.snapshot());
+      case OK -> {
+        updates.publish(key, result.snapshot());
+        yield reads.cart(result.snapshot());
+      }
       case QTY_LIMIT -> throw CartProblemException.quantityLimit(CartRepository.MAX_QUANTITY);
       case ITEMS_LIMIT -> throw CartProblemException.itemsLimit(CartRepository.MAX_SKUS);
       case ITEM_NOT_FOUND -> throw CartProblemException.itemNotFound();
