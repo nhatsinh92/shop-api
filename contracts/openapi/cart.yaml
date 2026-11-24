@@ -1,11 +1,17 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Cart service for signed-in users and guests. Signed-in users are identified by the access
     token; guests by the httpOnly cookie `guest_cart` (an opaque id), which the first write
     without authentication sets. Every cart response is `Cache-Control: private, no-store`.
+
+    Authentication failures: a request is answered 401 `AUTH_UNAUTHENTICATED` in two cases. First,
+    an invalid or expired Bearer token. Second, no Bearer token together with the `logged_in=1`
+    hint cookie, which means a signed-in user whose access token expired; the client refreshes the
+    session and retries instead of writing into a guest cart. No Bearer and no hint cookie is a
+    guest.
   license:
     name: UNLICENSED
     identifier: UNLICENSED
@@ -83,6 +89,11 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+          description: >-
+            The Bearer token is invalid or expired, or there is no Bearer token and the
+            `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
   /api/cart/summary:
@@ -112,6 +123,11 @@ paths:
                     itemCount: 3
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+          description: >-
+            The Bearer token is invalid or expired, or there is no Bearer token and the
+            `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
   /api/cart/items:
@@ -158,6 +174,11 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+          description: >-
+            The Bearer token is invalid or expired, or there is no Bearer token and the
+            `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '403':
           $ref: './errors.yaml#/components/responses/Forbidden'
           description: The gateway returns this when the `Origin` check fails.
@@ -204,6 +225,15 @@ paths:
                     code: CART_QTY_LIMIT
                     detail: A cart holds at most 10 units of one SKU.
                     limit: 10
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+                itemsLimit:
+                  value:
+                    type: about:blank
+                    title: Cart items limit reached
+                    status: 422
+                    code: CART_ITEMS_LIMIT
+                    detail: A cart holds at most 50 distinct SKUs.
+                    limit: 50
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
@@ -253,6 +283,11 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+          description: >-
+            The Bearer token is invalid or expired, or there is no Bearer token and the
+            `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '403':
           $ref: './errors.yaml#/components/responses/Forbidden'
           description: The gateway returns this when the `Origin` check fails.
@@ -334,6 +369,11 @@ paths:
                   $ref: '#/components/examples/EmptyCart'
         '400':
           $ref: './errors.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './errors.yaml#/components/responses/Unauthorized'
+          description: >-
+            The Bearer token is invalid or expired, or there is no Bearer token and the
+            `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '403':
           $ref: './errors.yaml#/components/responses/Forbidden'
           description: The gateway returns this when the `Origin` check fails.
@@ -417,7 +457,8 @@ components:
       required: false
       description: >-
         Opaque id of the guest cart, an httpOnly cookie set by the first write without
-        authentication. Ignored when the caller is signed in (except on merge).
+        authentication. Ignored when the caller is signed in (except on merge). A value that does
+        not match `^[A-Za-z0-9_-]{22}$` is ignored and treated as no cookie (never a 400).
       schema:
         type: string
   headers:
@@ -432,7 +473,7 @@ components:
         write without authentication.
       schema:
         type: string
-      example: guest_cart=8c1f0f6e9a3b4d2e; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000
+      example: guest_cart=q3Zt8mWc1Xv0bN5dRk7YaA; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000
     GuestCartClear:
       description: Clears the `guest_cart` cookie after the merge.
       schema:
@@ -442,17 +483,29 @@ components:
     CartWithItems:
       value:
         items:
+          - sku: SKU-ANC-PRO-BLK
+            slug: tai-nghe-anc-pro
+            name: Tai nghe ANC Pro
+            imageUrl: https://cdn.example.com/products/sku-anc-pro-blk.jpg
+            variantLabel: 'Màu: Đen nhám'
+            unitPrice: { amount: 890000, currency: VND }
+            listPrice: { amount: 1790000, currency: VND }
+            stockLevel: LOW
+            quantity: 1
+            lineTotal: { amount: 890000, currency: VND }
+            available: true
           - sku: SKU-001
             slug: ao-thun-basic
             name: Ao thun basic
             imageUrl: https://cdn.example.com/products/sku-001.jpg
             variantLabel: Den / M
             unitPrice: { amount: 290000, currency: VND }
+            stockLevel: IN_STOCK
             quantity: 2
             lineTotal: { amount: 580000, currency: VND }
             available: true
-        itemCount: 2
-        subtotal: { amount: 580000, currency: VND }
+        itemCount: 3
+        subtotal: { amount: 1470000, currency: VND }
         updatedAt: '2026-11-21T10:15:00Z'
     EmptyCart:
       value:
@@ -479,6 +532,11 @@ components:
           description: Variant description such as colour and size, when the product has variants.
         unitPrice:
           $ref: './errors.yaml#/components/schemas/Money'
+        listPrice:
+          $ref: './errors.yaml#/components/schemas/Money'
+          description: Struck-through list price; present only when higher than `unitPrice`.
+        stockLevel:
+          $ref: '#/components/schemas/StockLevel'
         quantity:
           type: integer
           minimum: 1
@@ -489,6 +547,10 @@ components:
         available:
           type: boolean
           description: False when the SKU is out of stock or no longer sold.
+    StockLevel:
+      type: string
+      description: Same values as `StockLevel` in `core.yaml`.
+      enum: [IN_STOCK, LOW, OUT_OF_STOCK]
     Cart:
       type: object
       required: [items, itemCount, subtotal, updatedAt]

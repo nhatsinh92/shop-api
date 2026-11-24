@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -21,7 +21,8 @@ x-error-codes:
   AUTH_UNAUTHENTICATED:
     status: 401
     description: >-
-      No valid access token was presented.
+      No valid access token was presented: the Bearer token is invalid or expired, or (on cart
+      operations) there is no Bearer token but the `logged_in=1` hint cookie is present.
   AUTH_INVALID_CREDENTIALS:
     status: 401
     description: >-
@@ -87,6 +88,11 @@ x-error-codes:
     description: >-
       The quantity would exceed the per-SKU limit. The limit is in the problem `detail` and in the
       `limit` extension field.
+  CART_ITEMS_LIMIT:
+    status: 422
+    description: >-
+      Adding a new SKU would put more than 50 distinct SKUs in the cart. The limit is in the
+      problem `detail` and in the `limit` extension field.
   CONFLICT:
     status: 409
     description: >-
@@ -224,7 +230,7 @@ components:
           type: integer
           format: int32
           minimum: 1
-          description: Per-SKU quantity limit, returned with CART_QTY_LIMIT.
+          description: Limit that was exceeded, returned with CART_QTY_LIMIT (10) and CART_ITEMS_LIMIT (50).
         errors:
           type: array
           description: Field-level validation errors, if any.
