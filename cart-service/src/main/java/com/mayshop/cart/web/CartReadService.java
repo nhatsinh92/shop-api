@@ -56,7 +56,16 @@ class CartReadService {
    * @throws com.mayshop.cart.product.ProductLookupException when {@code core} is needed and down
    */
   CartView.Cart cart(CallerIdentity identity) {
-    CartSnapshot snapshot = snapshot(identity);
+    return cart(snapshot(identity));
+  }
+
+  /**
+   * Builds the enriched cart from a snapshot that is already read (the write endpoints answer with
+   * the snapshot their script returned).
+   *
+   * @throws com.mayshop.cart.product.ProductLookupException when {@code core} is needed and down
+   */
+  CartView.Cart cart(CartSnapshot snapshot) {
     List<CartLine> lines = snapshot.items();
     ProductLookupResult found =
         lines.isEmpty()

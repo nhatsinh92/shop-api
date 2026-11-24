@@ -61,6 +61,19 @@ class CartExceptionHandler {
                 HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable", "SERVICE_UNAVAILABLE"));
   }
 
+  @ExceptionHandler(CartProblemException.class)
+  ResponseEntity<Map<String, Object>> cartProblem(CartProblemException e) {
+    Map<String, Object> body = Problems.body(e.status(), e.getMessage(), e.code());
+    if (e.limit() != null) {
+      body.put("detail", e.detail());
+      body.put("limit", e.limit());
+    }
+    return ResponseEntity.status(e.status())
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .header(HttpHeaders.CACHE_CONTROL, "no-store")
+        .body(body);
+  }
+
   private static ResponseEntity<Map<String, Object>> problem(
       HttpStatus status, String title, String code) {
     return ResponseEntity.status(status)
