@@ -66,7 +66,13 @@ class RevalidateWebhook {
     this.json = json;
     this.meters = meters;
     this.clock = Clock.systemUTC();
-    this.client = HttpClient.newBuilder().connectTimeout(this.timeout).build();
+    // HTTP/1.1 on purpose: the default HTTP_2 client sends "Upgrade: h2c" on http:// URLs, and
+    // `next start` closes such connections without a response (issue #95).
+    this.client =
+        HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(this.timeout)
+            .build();
     meters.counter(FAILED_COUNTER);
   }
 
