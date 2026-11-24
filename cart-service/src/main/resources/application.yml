@@ -18,3 +18,11 @@ management:
     health:
       probes:
         enabled: true
+
+auth:
+  jwt:
+    issuer: ${AUTH_JWT_ISSUER:mayshop-core}
+    audience: ${AUTH_JWT_AUDIENCE:mayshop}
+    jwks-uri: ${CORE_URL:http://localhost:8081}/.well-known/jwks.json
+    jwks-connect-timeout: 1s
+    jwks-read-timeout: 2s
