@@ -56,6 +56,17 @@ class CartWriteService {
     return respond(carts.remove(key, sku));
   }
 
+  /**
+   * Merges the guest cart into the user cart and answers with the enriched user cart. Never calls
+   * {@code core} for the merge itself; the enrichment follows {@code GET /api/cart}.
+   *
+   * @throws com.mayshop.cart.product.ProductLookupException when enrichment needs {@code core} and
+   *     it is down (the merge has already happened and is idempotent)
+   */
+  CartView.Cart merge(CartKey user, CartKey guest) {
+    return reads.cart(carts.merge(user, guest).snapshot());
+  }
+
   private CartView.Cart respond(WriteResult result) {
     return switch (result.status()) {
       case OK -> reads.cart(result.snapshot());
