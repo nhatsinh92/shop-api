@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Auth, product, order and checkout. Phase 1 pre-release: health, auth, the product catalog, the flash sale, member price, recommendations and the checkout reservation, shipping and payment options are specified so far, and order placement and lookup.
     The gateway answers 403 `AUTH_FORBIDDEN` when the `Origin` check fails on a state-changing request and 429 `RATE_LIMITED` when a rate limit is exceeded.
@@ -264,6 +264,73 @@ paths:
           $ref: './errors.yaml#/components/responses/NotFound'
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+  /internal/products/lookup:
+    post:
+      operationId: lookupInternalProducts
+      summary: Look up several products by SKU (internal)
+      description: >-
+        Internal batch lookup used by `cart-service` to enrich cart lines. Unknown SKUs are left
+        out of the response. `price` is the current availability price, so the sale price during a
+        flash sale; `listPrice` is present only when higher than `price`. The gateway never routes
+        it. It requires the `X-Internal-Token` header to equal the configured
+        `INTERNAL_API_TOKEN`; when no token is configured, or the header is missing or wrong, the
+        operation answers 404 so that its existence is not revealed.
+      tags: [products]
+      security: []
+      x-internal: true
+      parameters:
+        - name: X-Internal-Token
+          in: header
+          required: true
+          description: Shared secret of internal callers; must equal `INTERNAL_API_TOKEN`.
+          schema:
+            type: string
+          example: local-internal-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductLookupRequest'
+            examples:
+              default:
+                value:
+                  skus: [SKU-ANC-PRO-BLK, SKU-001]
+      responses:
+        '200':
+          description: The known products; unknown SKUs are left out.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductLookupResponse'
+              examples:
+                default:
+                  value:
+                    items:
+                      - sku: SKU-ANC-PRO-BLK
+                        slug: tai-nghe-anc-pro
+                        name: Tai nghe ANC Pro
+                        imageUrl: https://cdn.example.com/products/sku-anc-pro-blk.jpg
+                        variantLabel: 'Màu: Đen nhám'
+                        price: { amount: 890000, currency: VND }
+                        listPrice: { amount: 1790000, currency: VND }
+                        stockLevel: LOW
+        '400':
+          $ref: './errors.yaml#/components/responses/BadRequest'
+        '404':
+          description: The `X-Internal-Token` header is missing or wrong, or no internal token is configured.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './errors.yaml#/components/schemas/Problem'
+              examples:
+                default:
+                  value:
+                    type: about:blank
+                    title: Not found
+                    status: 404
+                    code: NOT_FOUND
+                    traceId: 4bf92f3577b34da6a3ce929d0e0e4736
   /internal/products/{sku}:
     patch:
       operationId: updateInternalProduct
@@ -1715,6 +1782,52 @@ components:
           slug: tai-nghe-khong-day-chong-on-anc-pro
           changes: [PRICE]
           tags: [product-3fa85f64-5717-4562-b3fc-2c963f66afa6, products, flash-sale]
+    ProductLookupRequest:
+      type: object
+      required: [skus]
+      properties:
+        skus:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items:
+            $ref: './errors.yaml#/components/schemas/Sku'
+    ProductLookupItem:
+      type: object
+      required: [sku, slug, name, imageUrl, price, stockLevel]
+      properties:
+        sku:
+          $ref: './errors.yaml#/components/schemas/Sku'
+        slug:
+          $ref: './errors.yaml#/components/schemas/Slug'
+        name:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+          description: The first image of the product.
+        variantLabel:
+          type: string
+          description: >-
+            Variant options such as `Màu: Đen nhám`; absent for single-variant products.
+        price:
+          $ref: './errors.yaml#/components/schemas/Money'
+          description: Current availability price (the sale price during a flash sale).
+        listPrice:
+          $ref: './errors.yaml#/components/schemas/Money'
+          description: Present only when higher than `price`.
+        stockLevel:
+          $ref: '#/components/schemas/StockLevel'
+    ProductLookupResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: One item per known SKU; unknown SKUs are left out.
+          items:
+            $ref: '#/components/schemas/ProductLookupItem'
     UpdateProductRequest:
       type: object
       description: At least one property is required.
