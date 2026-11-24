@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -23,13 +22,20 @@ import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** The {@code cart.updated} record shape and the failure handling, without a broker. */
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class CartUpdatedPublisherTest {
 
   private static final Instant NOW = Instant.parse("2026-11-24T10:00:00Z");
@@ -43,15 +49,14 @@ class CartUpdatedPublisherTest {
 
   private final JsonMapper json = JsonMapper.builder().build();
   private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
-  private KafkaTemplate<String, String> kafka;
+  @Mock private KafkaTemplate<String, String> kafka;
+  @Mock private SendResult<String, String> sendResult;
   private CartUpdatedPublisher publisher;
 
-  @SuppressWarnings("unchecked")
   @BeforeEach
   void setUp() {
-    kafka = mock(KafkaTemplate.class);
     when(kafka.send(any(String.class), any(String.class), any(String.class)))
-        .thenReturn(CompletableFuture.completedFuture(mock(SendResult.class)));
+        .thenReturn(CompletableFuture.completedFuture(sendResult));
     publisher = new CartUpdatedPublisher(kafka, json, meters, Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
