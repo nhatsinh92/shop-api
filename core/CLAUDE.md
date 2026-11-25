@@ -89,16 +89,20 @@ void listProductsMatchesTheContract() throws Exception {
   `flyway_schema_history` lives in the module's own schema):
   - `auth`: the auto-configured instance, set in `application.yml` (`spring.flyway`): location
     `db/migration/auth`, schema `auth`. Do not change it; merged migrations are never re-run.
-  - `product`: configured in code by `ProductMigrationConfiguration`: location
-    `db/migration/product`, schema `product`.
-  - `modulith` (event publication registry): the same configuration class migrates location
-    `db/migration/modulith`, schema `modulith`.
-- Boot's Flyway auto-configuration backs off once any `Flyway` bean exists, so a further module
-  (for example `modulith` for the event publication registry) does not declare a `Flyway` bean.
-  It adds its own instance next to the product one: build a `Flyway` with `Flyway.configure()`
-  (its location, `schemas`, `defaultSchema`, `createSchemas(true)`, the same data source) and
-  migrate it in the `FlywayMigrationStrategy`. Only one `FlywayMigrationStrategy` bean may exist, so
-  the task that adds the third instance merges them into one strategy that migrates every module.
+  - `product`: the `@Order(10)` `productMigration` bean in `ProductMigrationConfiguration`:
+    location `db/migration/product`, schema `product`.
+  - `modulith` (event publication registry): the `@Order(20)` `modulithMigration` bean in the same
+    class: location `db/migration/modulith`, schema `modulith`.
+- To add a module's migration, declare an `@Order`ed `ModuleMigration` bean (the interface is in
+  the application root package `com.mayshop.core`) in a configuration class in the module's own
+  package. Its `flyway(dataSource)` returns a `Flyway` built with `Flyway.configure()` (its
+  location, `schemas`, `defaultSchema`, `createSchemas(true)`, the given data source), not yet
+  migrated. Pick an order after the schemas it depends on.
+- A module never declares a `Flyway` bean (Boot's Flyway auto-configuration would back off and the
+  auth migration would stop) or a `FlywayMigrationStrategy` (only one may exist).
+  `ModuleMigrationConfiguration` in `com.mayshop.core` is the single strategy: it migrates auth
+  first, then every `ModuleMigration` bean in `@Order`. It only runs when Flyway is
+  auto-configured, so slices without a database are unaffected.
 - Test that a change keeps merged history intact: migrate a database with the old configuration
   first, then start `core` (see `ProductMigrationTest`).
 - Never store raw secrets (passwords, refresh tokens): only hashes.
