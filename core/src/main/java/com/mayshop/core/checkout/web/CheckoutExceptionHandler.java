@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Problem details (RFC 9457) for the checkout endpoints; every error response is no-store. */
-@RestControllerAdvice(assignableTypes = ReservationController.class)
+@RestControllerAdvice(assignableTypes = {ReservationController.class, OptionsController.class})
 class CheckoutExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(CheckoutExceptionHandler.class);
