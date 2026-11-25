@@ -42,6 +42,8 @@ gateway:
     refresh-per-session-per-minute: ${GATEWAY_REFRESH_PER_SESSION_PER_MINUTE:10}
     core-rate: ${GATEWAY_CORE_RATE:20}
     core-burst: ${GATEWAY_CORE_BURST:40}
+    checkout-reservation-rate: ${GATEWAY_CHECKOUT_RESERVATION_RATE:10}
+    order-rate: ${GATEWAY_ORDER_RATE:20}
 
 management:
   endpoints:
