@@ -29,10 +29,12 @@ import tools.jackson.databind.json.JsonMapper;
  * Places an order from a reservation exactly once per idempotency key.
  *
  * <p>Transaction 1 inserts the {@code IN_PROGRESS} key, consumes the reservation, creates the order
- * and, for COD, stores the 201 response. A domain error rolls it back, so the key leaves no row.
- * When the reservation had expired, its stock is released in its own transaction after the
- * rollback: {@link Reservations#consume} holds the row lock, so calling {@link Reservations#expire}
- * inside would wait for itself.
+ * and, for COD, stores the 201 response. An online order is created {@code PENDING_PAYMENT}; after
+ * the commit the gateway is charged and transaction 2 sets {@code PAID} or {@code PAYMENT_FAILED}
+ * (giving the stock back) and stores the 201 response. A domain error rolls it back, so the key
+ * leaves no row. When the reservation had expired, its stock is released in its own transaction
+ * after the rollback: {@link Reservations#consume} holds the row lock, so calling {@link
+ * Reservations#expire} inside would wait for itself.
  */
 @Service
 public class OrderPlacement {
@@ -83,16 +85,63 @@ public class OrderPlacement {
    */
   public Placed place(PlaceOrder request) {
     Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MICROS);
+    Step step;
     try {
       // Resolved per call: contexts without a database have no transaction manager.
-      return new TransactionTemplate(transactions.getObject())
-          .execute(status -> placeInTransaction(request, now));
+      step =
+          new TransactionTemplate(transactions.getObject())
+              .execute(status -> placeInTransaction(request, now));
     } catch (OrderProblemException e) {
       if (e.status() == 410 && "CHECKOUT_RESERVATION_EXPIRED".equals(e.code())) {
         releaseExpired(request.reservationId(), now);
       }
       throw e;
     }
+    return switch (step) {
+      case Step.Done done -> done.placed();
+      case Step.Charge charge -> settle(request, charge);
+    };
+  }
+
+  /** What transaction 1 decided: the answer is ready, or the order still has to be charged. */
+  private sealed interface Step {
+    record Done(Placed placed) implements Step {}
+
+    record Charge(UUID orderId, UUID reservationId, long total) implements Step {}
+  }
+
+  /**
+   * Charges the gateway outside any transaction, then runs transaction 2. If this process dies
+   * between the two, the order stays {@code PENDING_PAYMENT} and {@link OrderRecovery} settles it.
+   */
+  private Placed settle(PlaceOrder request, Step.Charge charge) {
+    Payments.Outcome outcome =
+        payments.charge(
+            charge.orderId(), charge.total(), request.paymentMethod(), request.mockOutcome());
+    Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MICROS);
+    return new TransactionTemplate(transactions.getObject())
+        .execute(status -> finishPayment(request, charge, outcome, now));
+  }
+
+  private Placed finishPayment(
+      PlaceOrder request, Step.Charge charge, Payments.Outcome outcome, Instant now) {
+    var locked = orders.lock(charge.orderId()).orElseThrow();
+    if (!"PENDING_PAYMENT".equals(locked.status())) {
+      // The recovery job settled it first and completed the key: answer with that result.
+      return new Placed(201, JSON.writeValueAsString(view(charge.orderId(), request)), false);
+    }
+    String status = outcome == Payments.Outcome.SUCCEEDED ? "PAID" : "PAYMENT_FAILED";
+    orders.updateStatus(charge.orderId(), status, outcome.name(), now);
+    if (outcome != Payments.Outcome.SUCCEEDED) {
+      reservations.restock(charge.reservationId());
+    }
+    String body = JSON.writeValueAsString(view(charge.orderId(), request));
+    idempotency.complete(request.userId(), request.key(), charge.orderId(), 201, body);
+    return new Placed(201, body, false);
+  }
+
+  private OrderView view(UUID orderId, PlaceOrder request) {
+    return orders.find(orderId, request.userId()).orElseThrow();
   }
 
   /** The caller's order, or {@link OrderProblemException#orderNotFound()}. */
@@ -100,11 +149,11 @@ public class OrderPlacement {
     return orders.find(id, userId).orElseThrow(OrderProblemException::orderNotFound);
   }
 
-  private Placed placeInTransaction(PlaceOrder request, Instant now) {
+  private Step placeInTransaction(PlaceOrder request, Instant now) {
     BeginResult begun = idempotency.begin(request.userId(), request.key(), request.fingerprint());
     switch (begun) {
       case BeginResult.Replay replay -> {
-        return new Placed(replay.status(), replay.body(), true);
+        return new Step.Done(new Placed(replay.status(), replay.body(), true));
       }
       case BeginResult.InProgress inProgress -> throw OrderProblemException.inProgress();
       case BeginResult.Reused reused -> throw OrderProblemException.keyReused();
@@ -129,10 +178,7 @@ public class OrderPlacement {
     if (!payments.isAvailable(request.paymentMethod())) {
       throw OrderProblemException.paymentMethodUnavailable();
     }
-    if (request.paymentMethod() != Payments.Method.COD) {
-      // Online payment arrives with the payment task; until then it is reported as unavailable.
-      throw OrderProblemException.paymentMethodUnavailable();
-    }
+    boolean online = request.paymentMethod() != Payments.Method.COD;
     Optional<Long> fee = shipping.fee(request.shippingOptionId());
     long shippingFee = fee.orElseThrow(() -> new IllegalStateException("Unknown shipping option"));
 
@@ -143,18 +189,22 @@ public class OrderPlacement {
             numbers.next(),
             request.userId(),
             request.reservationId(),
-            "PLACED",
+            online ? "PENDING_PAYMENT" : "PLACED",
             subtotal,
             request.shippingOptionId(),
             shippingFee,
             request.paymentMethod().name(),
-            "NOT_REQUIRED",
+            online ? "PENDING" : "NOT_REQUIRED",
             request.shippingAddressJson(),
             request.note(),
             now);
     List<NewItem> items =
         lines.stream().map(l -> new NewItem(l.sku(), l.quantity(), l.unitPrice())).toList();
     orders.insert(order, items);
+    if (online) {
+      idempotency.link(request.userId(), request.key(), orderId);
+      return new Step.Charge(orderId, request.reservationId(), order.total());
+    }
 
     OrderView view =
         new OrderView(
@@ -176,7 +226,7 @@ public class OrderPlacement {
             now.toString());
     String body = JSON.writeValueAsString(view);
     idempotency.complete(request.userId(), request.key(), orderId, 201, body);
-    return new Placed(201, body, false);
+    return new Step.Done(new Placed(201, body, false));
   }
 
   private void releaseExpired(UUID reservationId, Instant now) {

@@ -101,6 +101,42 @@ public class IdempotencyStore {
     }
   }
 
+  /** Records which order an {@code IN_PROGRESS} key created, so recovery can complete the key. */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void link(UUID userId, String key, UUID orderId) {
+    int updated =
+        jdbc.sql(
+                """
+                update orders.idempotency_keys set order_id = ?
+                 where user_id = ? and key = ? and state = 'IN_PROGRESS'
+                """)
+            .param(orderId)
+            .param(userId)
+            .param(key)
+            .update();
+    if (updated != 1) {
+      throw new IllegalStateException("No in-progress idempotency row to link for key " + key);
+    }
+  }
+
+  /**
+   * Completes the key that created {@code orderId} with the order's answer; a key that is already
+   * {@code COMPLETED} is left as it is.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void completeForOrder(UUID orderId, int status, String body) {
+    jdbc.sql(
+            """
+            update orders.idempotency_keys
+               set state = 'COMPLETED', response_status = ?, response_body = ?::jsonb
+             where order_id = ? and state = 'IN_PROGRESS'
+            """)
+        .param(status)
+        .param(body)
+        .param(orderId)
+        .update();
+  }
+
   /** Deletes rows created before {@code now - 24 h}; returns how many. */
   @Transactional
   public int deleteExpired() {
