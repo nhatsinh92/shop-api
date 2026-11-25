@@ -20,6 +20,17 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
   `GATEWAY_CART_WRITE_TIMEOUT` 2000, `GATEWAY_ORDER_TIMEOUT` 5000, `GATEWAY_RESERVATION_TIMEOUT`
   2000, `GATEWAY_CORE_TIMEOUT` 1000); connect timeout `GATEWAY_CONNECT_TIMEOUT` 200. No route has a
   retry filter: never replay a write at the edge.
+- Circuit breakers (`com.mayshop.gateway.fallback`): the `Breaker` route filter (Spring Cloud Gateway's
+  `CircuitBreaker`, skipped for `/api/auth/**`) wraps `cart-read`, `cart-write` and `core`;
+  `order-write`, `reservation-write` and `/api/auth/**` have none. Settings live under
+  `resilience4j.circuitbreaker` in `application.yml` (window 20, minimum 10 calls, 50 % failure and
+  slow-call rates, 10 s open, 5 half-open calls; `GATEWAY_BREAKER_WINDOW|MIN_CALLS|FAILURE_RATE|
+  SLOW_RATE|OPEN_SECONDS|HALF_OPEN_CALLS`); slow = the route's timeout. The Resilience4j time limiter
+  is disabled so the route `response-timeout` is the only bound. A timeout, connect error or
+  upstream 5xx (`statusCodes` 500, 502, 503, 504) counts; 4xx never does.
+- Fallback: `FallbackHandler` answers failed breaker calls 503 `SERVICE_UNAVAILABLE` (`Retry-After: 2`,
+  `Cache-Control: no-store`) and counts `gateway.fallback{route, reason=timeout|circuit_open|
+  upstream_error}`. No retries, no `.block()`.
 - Metrics: `/actuator/prometheus` is served on `MANAGEMENT_PORT` (default 9080) only; the app port
   exposes `health` and `info`. Never expose the management port publicly.
 - Phase 2: read the access token from the httpOnly cookie, verify it with the JWKS from `core`
