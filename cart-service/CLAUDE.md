@@ -54,6 +54,26 @@ be cheap, bounded and observable.
   Postgres being down never stops the service. Database settings: `CART_DB_URL`, `CART_DB_USER`,
   `CART_DB_PASSWORD`. Health: neither Postgres nor Kafka is part of readiness.
 
+## Snapshot cleanup and restore (packages `writebehind/store/` and `restore/`)
+
+- `SnapshotCleanupJob` runs daily (`CART_SNAPSHOT_CLEANUP_CRON`, default `0 30 3 * * *`, zone
+  `Asia/Ho_Chi_Minh`). It deletes `cart_snapshot` rows of guest keys (`cart:guest:*`) whose
+  `updated_at` is older than the guest cart TTL (`CartKey.GUEST_TTL`), 1 000 rows per statement until
+  a batch comes back short. User rows are never deleted. A failed run is logged; the next night
+  retries.
+- **Restore is a manual action for a lost Redis**, never part of a request path or start-up:
+  `make cart-restore` (demo stack running) starts a one-off `cart-service` container with
+  `--cart.restore=true`. `CartServiceApplication.main` sees the flag and runs `CartRestoreApplication`
+  instead: a small context with Redis and Postgres only (no HTTP, no scheduler, no Kafka listener)
+  that exits 0 when the restore finished and 1 when Redis or Postgres is unreachable.
+- For every `cart_snapshot` row whose Redis key is missing, `restore.lua` writes the hash back with
+  the stored `version`, `updatedAt` and lines in one script call, and never overwrites an existing
+  key. Guest keys get the remaining TTL (`updated_at` + guest TTL - now); guest rows already past it
+  are skipped (the cleanup job would delete them). User keys get the user TTL (`CartKey.USER_TTL`).
+  The log line and result count restored, skipped-existing, skipped-expired and malformed rows.
+- `CartRestoreApplication` has no stereotype annotation on purpose: the component scan of the normal
+  application must not pick it up.
+
 ## Commands
 
 - `./gradlew :cart-service:test` (Testcontainers Redis; needs Docker)
