@@ -85,6 +85,9 @@ product:
       PLATINUM: 8
 
 checkout:
+  payment:
+    # Comma-separated method ids (COD, EWALLET, CARD) shown as unavailable.
+    disabled-methods: ${CHECKOUT_DISABLED_PAYMENT_METHODS:}
   sweep:
     # Gives the stock of expired reservations back; false turns the sweep off (tests).
     enabled: ${CHECKOUT_SWEEP_ENABLED:true}
