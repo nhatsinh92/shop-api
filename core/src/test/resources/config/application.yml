@@ -1,0 +1,16 @@
+# Test-only overrides, loaded for every core test context on top of the main application.yml
+# (Spring Boot gives classpath:/config/ precedence over the classpath root without replacing it).
+#
+# Scheduled jobs are off: Spring caches test contexts, but each test class's Postgres container
+# stops when the class ends, so a job left running in a cached context keeps failing against a
+# database that is gone (connection refused, 30 s Hikari timeouts on the shared scheduler thread).
+# Tests call the jobs directly; a test that needs a schedule turns it on in @SpringBootTest.
+checkout:
+  sweep:
+    enabled: false
+order:
+  recovery:
+    enabled: false
+  idempotency:
+    cleanup:
+      enabled: false
