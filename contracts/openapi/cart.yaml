@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 1.3.0
+  version: 1.4.0
   description: >-
     Cart service for signed-in users and guests. Signed-in users are identified by the access
     token; guests by the httpOnly cookie `guest_cart` (an opaque id), which the first write
