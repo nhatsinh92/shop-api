@@ -103,3 +103,8 @@ order:
     # Settles online orders whose payment never resolved; false turns the job off (tests).
     enabled: ${ORDER_RECOVERY_ENABLED:true}
     interval: ${ORDER_RECOVERY_INTERVAL:PT30S}
+
+flags:
+  # Used when Redis (hash `flags`) has no usable value or is down: comma-separated name=on|off,
+  # for example `recommendations=off,member-price=on`. Flags not listed are on.
+  defaults: ${FLAGS_DEFAULTS:}
