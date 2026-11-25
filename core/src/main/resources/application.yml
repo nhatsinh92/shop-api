@@ -36,10 +36,19 @@ spring:
       connect-timeout: 500ms
 
 management:
+  server:
+    # Internal port for Prometheus; compose does not publish it.
+    port: ${MANAGEMENT_PORT:9081}
   endpoints:
     web:
       exposure:
-        include: health,info
+        # The management port exposes prometheus too; the app port filters it out below.
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        checkout.payment: true
   health:
     redis:
       # Redis only holds grace-period keys; core stays ready without it.
