@@ -89,9 +89,10 @@ demo-smoke-product: ## List, detail, availability, internal change and product.u
 demo-smoke-cart: ## Guest and signed-in cart operations, merge and cart snapshot of a running demo
 	bash infra/smoke-cart.sh
 
+# MSYS_NO_PATHCONV=1 stops Git Bash on Windows from rewriting /scripts/cart.js to a host path.
 demo-k6-cart: ## k6 cart load (50 VUs, 60 s) through the gateway of a running demo; fails at p95 >= 50 ms or errors >= 1 %
 	DEMO_USERS="$$(grep -Eo '`[a-z]+@example\.com` \| `[a-z]+-[a-z]+-[0-9]{4}`' seed/README.md | sed -e 's/`//g' -e 's/ | /:/' | paste -sd, -)" \
-	$(COMPOSE) --profile peak run --rm --no-deps -e DEMO_USERS k6 run /scripts/cart.js
+	MSYS_NO_PATHCONV=1 $(COMPOSE) --profile peak run --rm --no-deps -e DEMO_USERS k6 run /scripts/cart.js
 
 lock: ## Refresh gradle.lockfile after changing dependencies
 	$(GRADLE) resolveAndLockAll --write-locks

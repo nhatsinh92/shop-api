@@ -21,8 +21,9 @@ Environment:
   WEB_ORIGIN      allowed web origin (default http://localhost:3000)
   SMOKE_EMAIL     demo user email (default minh@example.com, see seed/README.md)
   SMOKE_PASSWORD  demo user password (default: see seed/README.md for minh@example.com)
-  SMOKE_SKU_A     first SKU (default SKU-KB-75)
-  SMOKE_SKU_B     second SKU (default SKU-BOTTLE-750)
+  SMOKE_SKU_A     first SKU, a single-variant product (default SKU-KB-75)
+  SMOKE_SKU_B     second SKU, a product with variants (default SKU-ANC-PRO-BLK)
+  SMOKE_WARMUP_S  seconds to retry a 503 on the first add while core warms up (default 15)
 
 The check changes the cart of the demo user. Start the stack first with: make demo
 USAGE
@@ -47,7 +48,8 @@ WEB_ORIGIN="${WEB_ORIGIN:-http://localhost:3000}"
 SMOKE_EMAIL="${SMOKE_EMAIL:-minh@example.com}"
 SMOKE_PASSWORD="${SMOKE_PASSWORD:-}"
 SMOKE_SKU_A="${SMOKE_SKU_A:-SKU-KB-75}"
-SMOKE_SKU_B="${SMOKE_SKU_B:-SKU-BOTTLE-750}"
+SMOKE_SKU_B="${SMOKE_SKU_B:-SKU-ANC-PRO-BLK}"
+SMOKE_WARMUP_S="${SMOKE_WARMUP_S:-15}"
 compose=(docker compose -f "$root/infra/docker-compose.yml")
 
 workdir="$(mktemp -d)"
@@ -85,6 +87,21 @@ call() {
   [ "$STATUS" = "$expected" ] || fail "expected HTTP $expected, got $STATUS: $*"
 }
 
+# call_warm <expected-status> <curl args...>: like call, but retries a 503 (the product lookup of a
+# freshly started stack can exceed its 150 ms budget) for up to SMOKE_WARMUP_S seconds.
+call_warm() {
+  local expected="$1" attempts=0 deadline=$((SECONDS + SMOKE_WARMUP_S))
+  shift
+  while :; do
+    attempts=$((attempts + 1))
+    STATUS="$(curl -sS -o "$BODY" -D "$HEADERS" -w '%{http_code}' "$@")" || fail "curl failed: $*"
+    [ "$STATUS" = 503 ] && [ "$SECONDS" -lt "$deadline" ] || break
+    sleep 1
+  done
+  [ "$attempts" -eq 1 ] || echo "   warm-up: $attempts attempts"
+  [ "$STATUS" = "$expected" ] || fail "expected HTTP $expected, got $STATUS after $attempts attempts: $*"
+}
+
 expect_jq() {
   [ "$(jq -r "$1" "$BODY")" = "true" ] || fail "$2"
 }
@@ -99,7 +116,7 @@ origin=(-H "Origin: $WEB_ORIGIN")
 
 # ---------- guest ----------
 begin "guest adds $SMOKE_SKU_A x2 and receives guest_cart"
-call 200 -X POST "${json[@]}" "${origin[@]}" -d "{\"sku\":\"$SMOKE_SKU_A\",\"quantity\":2}" \
+call_warm 200 -X POST "${json[@]}" "${origin[@]}" -d "{\"sku\":\"$SMOKE_SKU_A\",\"quantity\":2}" \
   "$GATEWAY_URL/api/cart/items"
 guest="$(cookie_value guest_cart)"
 [ -n "$guest" ] || fail "no non-empty Set-Cookie for guest_cart"
@@ -116,9 +133,14 @@ pass "200, two lines"
 
 begin "guest reads the cart: enriched lines"
 call 200 "${gcookie[@]}" "$GATEWAY_URL/api/cart"
-expect_jq '.itemCount == 3 and (.items | all(.stockLevel != null and (has("variantLabel"))))' \
-  "expected itemCount 3 and variantLabel and stockLevel on every line"
-pass "200, itemCount 3, variantLabel and stockLevel present"
+expect_jq '.itemCount == 3 and (.items | all(.stockLevel != null))' \
+  "expected itemCount 3 and stockLevel on every line"
+# variantLabel is optional in the contract: present only when the product has variants.
+expect_jq "(.items[] | select(.sku == \"$SMOKE_SKU_B\") | .variantLabel | type == \"string\" and length > 0)" \
+  "expected a variantLabel on $SMOKE_SKU_B (a product with variants)"
+expect_jq "(.items[] | select(.sku == \"$SMOKE_SKU_A\") | has(\"variantLabel\") | not)" \
+  "expected no variantLabel on $SMOKE_SKU_A (a single-variant product)"
+pass "200, itemCount 3, stockLevel on every line, variantLabel only on $SMOKE_SKU_B"
 
 begin "guest reads the summary"
 call 200 "${gcookie[@]}" "$GATEWAY_URL/api/cart/summary"
