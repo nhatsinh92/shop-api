@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop cart API
-  version: 1.4.0
+  version: 1.5.0
   description: >-
     Cart service for signed-in users and guests. Signed-in users are identified by the access
     token; guests by the httpOnly cookie `guest_cart` (an opaque id), which the first write
@@ -47,7 +47,7 @@ paths:
                   value:
                     status: UP
         '503':
-          description: The service or one of its dependencies is down.
+          description: The service or one of its dependencies is down. Also answered by the gateway when `cart-service` is slow or unavailable.
           content:
             application/json:
               schema:
@@ -96,6 +96,7 @@ paths:
             `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The service or a dependency is unavailable. Also answered by the gateway when `cart-service` is slow or unavailable.
   /api/cart/summary:
     get:
       operationId: getCartSummary
@@ -130,6 +131,7 @@ paths:
             `logged_in=1` hint cookie is present (the access token expired; refresh and retry).
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The service or a dependency is unavailable. Also answered by the gateway when `cart-service` is slow or unavailable.
   /api/cart/items:
     post:
       operationId: addCartItem
@@ -237,6 +239,7 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The service or a dependency is unavailable. Also answered by the gateway when `cart-service` is slow or unavailable.
   /api/cart/items/{sku}:
     patch:
       operationId: updateCartItem
@@ -337,6 +340,7 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The service or a dependency is unavailable. Also answered by the gateway when `cart-service` is slow or unavailable.
     delete:
       operationId: removeCartItem
       summary: Remove an item from the cart
@@ -393,6 +397,7 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The service or a dependency is unavailable. Also answered by the gateway when `cart-service` is slow or unavailable.
   /api/cart/merge:
     post:
       operationId: mergeGuestCart
@@ -433,6 +438,7 @@ paths:
           description: The gateway returns this when the `Origin` check fails.
         '503':
           $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The service or a dependency is unavailable. Also answered by the gateway when `cart-service` is slow or unavailable.
 components:
   securitySchemes:
     cookieAuth:
