@@ -192,13 +192,13 @@ class CheckoutRateLimitGatewayTest {
             .post()
             .uri(ORDERS)
             .header("Cookie", "access_token=" + user)
-            .header("Idempotency-Key", "0b7f2c1e-5d4a-4c1e-9a55-0d9c2f6b7a10")
+            .header("Idempotency-Key", "attempt-one")
             .header("X-Mock-Payment-Outcome", "DECLINED")
             .exchange()
             .expectBody()
             .returnResult();
     assertThat(CORE.lastHeaders().get("idempotency-key"))
-        .containsExactly("0b7f2c1e-5d4a-4c1e-9a55-0d9c2f6b7a10");
+        .containsExactly("attempt-one");
     assertThat(CORE.lastHeaders().get("x-mock-payment-outcome")).containsExactly("DECLINED");
     assertThat(result.getResponseHeaders().get("Idempotent-Replayed")).containsExactly("true");
   }
