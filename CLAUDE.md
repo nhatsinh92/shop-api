@@ -87,6 +87,7 @@ owner's `human-approved` label:
 - `.github/**`, `.claude/**`
 - Lint and coverage config: root `build.gradle.kts`, `config/**`, `redocly.yaml`,
   `.redocly.lint-ignore.yaml`, `gradle.properties`, `gradle/wrapper/**`
+- Secrets-scan config: `.gitleaks.toml` (the UUID test-data allowlist)
 - Existing test files (`**/src/test/**` that already exist on `main`): add new tests, never edit,
   weaken or delete existing ones in a feature task
 - Contract major version bumps (`merge-gate` needs `human-approved`, no `infra-change`)
