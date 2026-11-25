@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 1.4.0
+  version: 1.5.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -368,6 +368,14 @@ components:
                 traceId: 4bf92f3577b34da6a3ce929d0e0e4736
     ServiceUnavailable:
       description: The service or a dependency is unavailable.
+      headers:
+        Retry-After:
+          required: false
+          description: Seconds to wait before retrying, when known.
+          schema:
+            type: integer
+            minimum: 0
+          example: 5
       content:
         application/problem+json:
           schema:

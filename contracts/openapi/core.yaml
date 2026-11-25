@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop core API
-  version: 1.4.0
+  version: 1.5.0
   description: >-
     Auth, product, order and checkout: health, auth, the product catalog, the flash sale, member price, recommendations, the checkout reservation, shipping and payment options, and order placement and lookup.
     The gateway answers 403 `AUTH_FORBIDDEN` when the `Origin` check fails on a state-changing request and 429 `RATE_LIMITED` when a rate limit is exceeded.
@@ -28,6 +28,9 @@ tags:
       Public product catalog: list, detail and a short-cache availability read. Responses carry
       `Cache-Control` and the `x-cache-tags` the frontend uses to revalidate. Also the member price
       and recommendations, which are user-aware and never cached by shared caches.
+  - name: flags
+    description: >-
+      Public feature flags the frontend reads to switch optional features off during a peak.
   - name: flash-sale
     description: The cached flash sale list shown on the home page.
   - name: checkout
@@ -508,6 +511,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/products/{slug}:
     get:
       operationId: getProduct
@@ -596,6 +602,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/products/{sku}/availability:
     get:
       operationId: getProductAvailability
@@ -652,6 +661,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/flash-sales/current:
     get:
       operationId: getCurrentFlashSale
@@ -711,6 +723,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/products/{slug}/member-price:
     get:
       operationId: getMemberPrice
@@ -767,6 +782,42 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
+  /api/flags:
+    get:
+      operationId: getFeatureFlags
+      summary: Get the feature flags
+      description: >-
+        Public feature flags. Shared caches may keep the answer for 5 seconds, so a flag change can
+        take up to 5 seconds to reach clients.
+      tags: [flags]
+      security: []
+      responses:
+        '200':
+          description: The current feature flags.
+          headers:
+            Cache-Control:
+              description: Shared caches may keep the flags for 5 seconds.
+              schema:
+                type: string
+              example: public, max-age=5
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlags'
+              examples:
+                default:
+                  value:
+                    recommendations: true
+                    memberPrice: true
+                    onlinePayment: false
+        '429':
+          $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/recommendations:
     get:
       operationId: listRecommendations
@@ -775,7 +826,7 @@ paths:
         Authentication is optional. The response shape is the same whether the results are
         personalised for the signed-in user or a static list of products related to `productSlug`,
         so clients do not depend on how they were chosen. The home and product pages stream it in
-        after the cached shell.
+        after the cached shell. The list is empty when the `recommendations` feature flag is off.
       tags: [products]
       security:
         - {}
@@ -845,6 +896,9 @@ paths:
                         message: must be between 1 and 20
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/checkout/reservations:
     post:
       operationId: createCheckoutReservation
@@ -959,6 +1013,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/checkout/shipping-options:
     get:
       operationId: listShippingOptions
@@ -1019,6 +1076,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/checkout/payment-methods:
     get:
       operationId: listPaymentMethods
@@ -1026,7 +1086,9 @@ paths:
       description: >-
         Methods shown on the checkout page. `available` is false when a method is temporarily
         unusable, for example when the payment gateway is down; the page shows it disabled.
-        `EWALLET` and `CARD` are online methods served by the mock payment gateway.
+        `EWALLET` and `CARD` are online methods served by the mock payment gateway. Online
+        methods are unavailable while the payment provider is failing or the `onlinePayment`
+        feature flag is off.
       tags: [checkout]
       responses:
         '200':
@@ -1055,6 +1117,9 @@ paths:
           $ref: './errors.yaml#/components/responses/Unauthorized'
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
   /api/orders:
     post:
       operationId: placeOrder
@@ -1292,6 +1357,9 @@ paths:
                     traceId: 4bf92f3577b34da6a3ce929d0e0e4736
         '429':
           $ref: './errors.yaml#/components/responses/TooManyRequests'
+        '503':
+          $ref: './errors.yaml#/components/responses/ServiceUnavailable'
+          description: The gateway answers this when `core` is slow or unavailable (breaker fallback).
 webhooks:
   productRevalidate:
     post:
@@ -1684,6 +1752,22 @@ components:
           enum: [STANDARD, SILVER, GOLD, PLATINUM]
         price:
           $ref: './errors.yaml#/components/schemas/Money'
+    FeatureFlags:
+      type: object
+      description: >-
+        Feature flags. Clients ignore unknown properties (unknown flags). The answer may be up to
+        5 seconds old.
+      required: [recommendations, memberPrice, onlinePayment]
+      properties:
+        recommendations:
+          type: boolean
+          description: When false, `GET /api/recommendations` returns an empty list.
+        memberPrice:
+          type: boolean
+          description: When false, the member price is not offered.
+        onlinePayment:
+          type: boolean
+          description: When false, online payment methods are unavailable.
     Recommendations:
       type: object
       required: [items]
