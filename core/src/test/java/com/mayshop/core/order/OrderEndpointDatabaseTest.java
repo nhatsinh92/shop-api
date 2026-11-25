@@ -325,27 +325,6 @@ class OrderEndpointDatabaseTest {
   }
 
   @Test
-  void onlineMethodsAreUnavailableUntilTheOnlinePaymentTask() throws Exception {
-    // Interim behaviour until #140: EWALLET and CARD answer 422 and consume nothing.
-    UUID reservation = activeReservation();
-    assertProblem(
-        place(KEY, body(reservation, "EWALLET", "0901234567")),
-        422,
-        "CHECKOUT_PAYMENT_METHOD_UNAVAILABLE");
-    assertProblem(
-        place(KEY_B, body(reservation, "CARD", "0901234567")),
-        422,
-        "CHECKOUT_PAYMENT_METHOD_UNAVAILABLE");
-    assertThat(
-            jdbc.sql("select status from checkout.reservations where id = ?")
-                .param(reservation)
-                .query(String.class)
-                .single())
-        .isEqualTo("ACTIVE");
-    assertThat(count("orders.idempotency_keys")).isZero();
-  }
-
-  @Test
   void theCallersOrderIsReadBackAndMatchesTheContract() throws Exception {
     var created = json(place(KEY, cod(activeReservation())));
     var response = read(created.get("id").asString(), OrderSupport.USER);
