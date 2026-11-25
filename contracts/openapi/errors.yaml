@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Shop shared error schema
-  version: 1.3.0
+  version: 1.4.0
   description: >-
     Shared error schemas referenced by core.yaml and cart.yaml. Errors follow
     RFC 9457 (problem details) with a stable machine-readable `code`.
@@ -70,6 +70,14 @@ x-error-codes:
     status: 410
     description: >-
       The reservation passed its 10-minute expiry (or was released); reserve again.
+  CHECKOUT_RESERVATION_CONSUMED:
+    status: 410
+    description: >-
+      An order was already placed from this reservation.
+  CHECKOUT_PAYMENT_METHOD_UNAVAILABLE:
+    status: 422
+    description: >-
+      The chosen payment method is currently unavailable; choose another one.
   PAGINATION_CURSOR_INVALID:
     status: 400
     description: >-
