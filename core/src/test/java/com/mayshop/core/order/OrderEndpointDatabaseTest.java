@@ -192,7 +192,7 @@ class OrderEndpointDatabaseTest {
                 .optional())
         .isEmpty();
     assertThat(
-            jdbc.sql("select shipping_address ? 'district' from orders.orders")
+            jdbc.sql("select jsonb_exists(shipping_address, 'district') from orders.orders")
                 .query(Boolean.class)
                 .single())
         .isFalse();
