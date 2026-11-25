@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -82,10 +83,70 @@ public class Reservations {
     return reservation;
   }
 
-  /** The reservation, only when it belongs to {@code userId}. */
+  /**
+   * The reservation, only when it belongs to {@code userId}. An {@code ACTIVE} reservation whose
+   * {@code expiresAt} has passed reads {@link Status#EXPIRED} at once, before any sweep ran.
+   */
   @Transactional(readOnly = true)
   public Optional<Reservation> find(UUID id, UUID userId) {
-    return store.find(id, userId);
+    Instant now = Instant.now(clock);
+    return store.find(id, userId).map(reservation -> readAt(reservation, now));
+  }
+
+  /**
+   * Expires one reservation in its own transaction: when it is {@code ACTIVE} and {@code now >=
+   * expiresAt}, it becomes {@code EXPIRED} and its stock goes back. Guarded by {@code released_at},
+   * so a second call (or a concurrent sweep) releases nothing.
+   *
+   * @return true when this call expired the reservation and released its stock
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public boolean expire(UUID id, Instant now) {
+    return store.findForUpdate(id).map(reservation -> expireLocked(reservation, now)).orElse(false);
+  }
+
+  /**
+   * One sweep run: takes up to {@code limit} due reservations that no other sweep has locked,
+   * expires them and releases their stock, all in one transaction.
+   *
+   * @return how many reservations this run expired
+   */
+  @Transactional
+  public int expireDue(Instant now, int limit) {
+    int expired = 0;
+    for (Reservation reservation : store.findDueForUpdateSkipLocked(now, limit)) {
+      if (expireLocked(reservation, now)) {
+        expired++;
+      }
+    }
+    return expired;
+  }
+
+  private boolean expireLocked(Reservation reservation, Instant now) {
+    if (reservation.status() != Status.ACTIVE || now.isBefore(reservation.expiresAt())) {
+      return false;
+    }
+    if (!store.markExpired(reservation.id(), now)) {
+      return false;
+    }
+    holds.release(
+        reservation.items().stream()
+            .map(item -> new ReleaseLine(item.sku(), item.quantity(), item.tookSaleStock()))
+            .toList());
+    return true;
+  }
+
+  private static Reservation readAt(Reservation reservation, Instant now) {
+    if (reservation.status() != Status.ACTIVE || now.isBefore(reservation.expiresAt())) {
+      return reservation;
+    }
+    return new Reservation(
+        reservation.id(),
+        reservation.userId(),
+        Status.EXPIRED,
+        reservation.createdAt(),
+        reservation.expiresAt(),
+        reservation.items());
   }
 
   private static Item item(Line line, List<HeldLine> held) {

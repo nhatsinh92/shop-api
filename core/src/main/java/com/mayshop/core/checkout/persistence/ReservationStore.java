@@ -29,4 +29,26 @@ public interface ReservationStore {
 
   /** The reservation with its lines, only when it belongs to {@code userId}. */
   Optional<Reservation> find(UUID id, UUID userId);
+
+  /** One reservation with its lines, locked for the transaction, whoever owns it. */
+  default Optional<Reservation> findForUpdate(UUID id) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Up to {@code limit} {@code ACTIVE} reservations with {@code expires_at <= now}, locked for the
+   * transaction; rows another transaction has locked are skipped ({@code FOR UPDATE SKIP LOCKED}).
+   */
+  default List<Reservation> findDueForUpdateSkipLocked(Instant now, int limit) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Marks an {@code ACTIVE} reservation {@code EXPIRED} and sets {@code released_at}.
+   *
+   * @return false when it was not active or its stock had been given back already
+   */
+  default boolean markExpired(UUID id, Instant now) {
+    throw new UnsupportedOperationException();
+  }
 }

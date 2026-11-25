@@ -57,6 +57,49 @@ class JdbcReservationStore implements ReservationStore {
   }
 
   @Override
+  public Optional<Reservation> findForUpdate(UUID id) {
+    return jdbc.sql(
+            """
+            select id, user_id, status, created_at, expires_at from checkout.reservations
+             where id = ? for update
+            """)
+        .param(id)
+        .query((rs, n) -> header(rs))
+        .optional()
+        .map(this::withItems);
+  }
+
+  @Override
+  public List<Reservation> findDueForUpdateSkipLocked(Instant now, int limit) {
+    List<Header> headers =
+        jdbc.sql(
+                """
+                select id, user_id, status, created_at, expires_at from checkout.reservations
+                 where status = 'ACTIVE' and expires_at <= ?
+                 order by expires_at
+                 limit ? for update skip locked
+                """)
+            .param(Timestamp.from(now))
+            .param(limit)
+            .query((rs, n) -> header(rs))
+            .list();
+    return headers.stream().map(this::withItems).toList();
+  }
+
+  @Override
+  public boolean markExpired(UUID id, Instant now) {
+    return jdbc.sql(
+                """
+                update checkout.reservations set status = 'EXPIRED', released_at = ?
+                 where id = ? and status = 'ACTIVE' and released_at is null
+                """)
+            .param(Timestamp.from(now))
+            .param(id)
+            .update()
+        == 1;
+  }
+
+  @Override
   public void insert(Reservation reservation) {
     jdbc.sql(
             """

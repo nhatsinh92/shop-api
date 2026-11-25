@@ -83,3 +83,9 @@ product:
       SILVER: 3
       GOLD: 5
       PLATINUM: 8
+
+checkout:
+  sweep:
+    # Gives the stock of expired reservations back; false turns the sweep off (tests).
+    enabled: ${CHECKOUT_SWEEP_ENABLED:true}
+    interval: ${CHECKOUT_SWEEP_INTERVAL:PT10S}
