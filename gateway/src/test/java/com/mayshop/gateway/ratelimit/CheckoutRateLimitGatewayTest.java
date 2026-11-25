@@ -197,8 +197,7 @@ class CheckoutRateLimitGatewayTest {
             .exchange()
             .expectBody()
             .returnResult();
-    assertThat(CORE.lastHeaders().get("idempotency-key"))
-        .containsExactly("attempt-one");
+    assertThat(CORE.lastHeaders().get("idempotency-key")).containsExactly("attempt-one");
     assertThat(CORE.lastHeaders().get("x-mock-payment-outcome")).containsExactly("DECLINED");
     assertThat(result.getResponseHeaders().get("Idempotent-Replayed")).containsExactly("true");
   }
