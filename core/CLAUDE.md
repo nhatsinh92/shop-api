@@ -15,6 +15,7 @@ events inside core and Redpanda (Kafka API) to other deployables once an epic in
 | `product` | `com.mayshop.core.product` | catalog, product detail, flash sale, approximate stock, `product.updated` |
 | `order` | `com.mayshop.core.order` | orders, idempotent placement |
 | `checkout` | `com.mayshop.core.checkout` | price and stock confirmation, reservations (10 min TTL), payment |
+| `flags` | `com.mayshop.core.flags` | feature flags from the Redis hash `flags` (2 s cache, `FLAGS_DEFAULTS`), `GET /api/flags` |
 
 Rules:
 
