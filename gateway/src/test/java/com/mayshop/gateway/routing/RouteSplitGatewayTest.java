@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
+import org.springframework.cloud.gateway.filter.FilterDefinition;
+import org.springframework.cloud.gateway.route.RouteDefinition;
+import org.springframework.cloud.gateway.route.RouteDefinitionLocator;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -41,6 +44,7 @@ class RouteSplitGatewayTest {
   @Autowired private WebTestClient client;
   @Autowired private InMemoryRateLimiter limiter;
   @Autowired private RouteLocator routeLocator;
+  @Autowired private RouteDefinitionLocator routeDefinitionLocator;
 
   @DynamicPropertySource
   static void upstreams(DynamicPropertyRegistry registry) {
@@ -122,13 +126,15 @@ class RouteSplitGatewayTest {
 
   @Test
   void noRouteConfiguresARetryFilter() {
-    boolean anyRetry =
-        routeLocator
-            .getRoutes()
-            .any(r ->
-                r.getFilters().stream().anyMatch(f -> f.toString().toLowerCase().contains("retry")))
+    List<String> filterNames =
+        routeDefinitionLocator
+            .getRouteDefinitions()
+            .flatMapIterable(RouteDefinition::getFilters)
+            .map(FilterDefinition::getName)
+            .collectList()
             .block();
 
-    assertThat(anyRetry).isFalse();
+    assertThat(routeDefinitionLocator.getRouteDefinitions().count().block()).isEqualTo(5);
+    assertThat(filterNames).noneMatch(name -> name.toLowerCase().contains("retry"));
   }
 }

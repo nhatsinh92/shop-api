@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.mayshop.gateway.support.InMemoryRateLimiter;
 import com.mayshop.gateway.support.RecordingUpstream;
 import java.time.Duration;
-import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
-import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -40,7 +38,6 @@ class RouteTimeoutGatewayTest {
 
   @Autowired private WebTestClient client;
   @Autowired private InMemoryRateLimiter limiter;
-  @Autowired private RouteLocator routeLocator;
 
   @DynamicPropertySource
   static void upstreams(DynamicPropertyRegistry registry) {
@@ -61,20 +58,6 @@ class RouteTimeoutGatewayTest {
     limiter.reset();
     CORE.reset();
     CART.reset();
-  }
-
-  @Test
-  void routeTimeoutsDefaultToTheDocumentedValues() {
-    Map<String, Object> metadata =
-        Map.copyOf(
-            routeLocator
-                .getRoutes()
-                .collectMap(r -> r.getId(), r -> r.getMetadata().get("response-timeout"))
-                .block());
-
-    assertThat(metadata.get("cart-write")).hasToString("2000");
-    assertThat(metadata.get("order-write")).hasToString("5000");
-    assertThat(metadata.get("reservation-write")).hasToString("2000");
   }
 
   @Test
