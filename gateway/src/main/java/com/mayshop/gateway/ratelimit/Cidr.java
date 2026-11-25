@@ -7,7 +7,10 @@ import java.util.regex.Pattern;
 /** An IPv4 or IPv6 network in CIDR notation; a bare address is a single-host network. */
 record Cidr(byte[] network, int prefixLength) {
 
-  private static final Pattern LITERAL = Pattern.compile("[0-9a-fA-F:.]+");
+  private static final Pattern IPV4 =
+      Pattern.compile(
+          "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}");
+  private static final Pattern IPV6 = Pattern.compile("[0-9a-fA-F:.]+");
 
   /** Parses {@code 10.0.0.0/8}, {@code fd00::/8} or a bare address; never resolves host names. */
   static Cidr parse(String text) {
@@ -38,9 +41,19 @@ record Cidr(byte[] network, int prefixLength) {
     return new Cidr(bytes, prefix);
   }
 
-  /** The address for an IP literal, or null when the text is not one (no DNS lookup is made). */
+  /**
+   * The address for an IP literal, or null when the text is not one. Only a dotted-quad IPv4 (four
+   * decimal octets) or text containing a colon (IPv6) reaches {@link InetAddress#getByName}, which
+   * never consults the resolver for those forms. Host-like tokens such as {@code cafe} and bare
+   * numbers such as {@code 10} are rejected up front.
+   */
   static InetAddress literal(String text) {
-    if (text == null || !LITERAL.matcher(text).matches()) {
+    if (text == null) {
+      return null;
+    }
+    boolean ipv4 = IPV4.matcher(text).matches();
+    boolean ipv6 = text.indexOf(':') >= 0 && IPV6.matcher(text).matches();
+    if (!ipv4 && !ipv6) {
       return null;
     }
     try {
