@@ -78,17 +78,19 @@ class JdbcReservationStore implements ReservationStore {
                  took_sale_stock, name, variant_label, image_url)
               values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               """)
-          .param(reservation.id())
-          .param(item.sku())
-          .param(position++)
-          .param(item.quantity())
-          .param(item.unitPrice())
-          .param(item.basePrice())
-          .param(item.priceChanged())
-          .param(item.tookSaleStock())
-          .param(item.name())
-          .param(item.variantLabel(), java.sql.Types.VARCHAR)
-          .param(item.imageUrl())
+          .params(
+              java.util.Arrays.asList(
+                  reservation.id(),
+                  item.sku(),
+                  position++,
+                  item.quantity(),
+                  item.unitPrice(),
+                  item.basePrice(),
+                  item.priceChanged(),
+                  item.tookSaleStock(),
+                  item.name(),
+                  item.variantLabel(),
+                  item.imageUrl()))
           .update();
     }
   }
