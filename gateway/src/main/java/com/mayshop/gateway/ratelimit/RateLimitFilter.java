@@ -25,7 +25,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Rate-limits {@code /api/auth/login}, {@code /api/auth/refresh} and the other {@code core} routes.
+ * Rate-limits {@code /api/auth/login}, {@code /api/auth/refresh} and the other {@code core} routes;
+ * {@code POST /api/checkout/reservations} and {@code POST /api/orders} also have a per-user window.
  * {@code /api/cart/**} is never limited here (technical notes § 7: limits sit at checkout).
  *
  * <p>Runs right after {@code AccessCookieFilter}, so an {@code Authorization} header is present
@@ -37,6 +38,8 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
   private static final String CART_PREFIX = "/api/cart";
   private static final String LOGIN = "/api/auth/login";
   private static final String REFRESH = "/api/auth/refresh";
+  private static final String CHECKOUT_RESERVATIONS = "/api/checkout/reservations";
+  private static final String ORDERS = "/api/orders";
   private static final String REFRESH_COOKIE = "refresh_token";
   private static final int MAX_LOGIN_BODY_BYTES = 64 * 1024;
 
@@ -115,9 +118,32 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
   private Mono<Void> core(ServerWebExchange exchange, GatewayFilterChain chain) {
     String subject = subject(exchange.getRequest().getHeaders());
     String key = subject != null ? "core:sub:" + subject : "core:ip:" + clientIp(exchange);
-    return limiter
-        .bucket(key, limits.coreRate(), limits.coreBurst())
+    Mono<RateLimiter.Decision> coreDecision =
+        limiter.bucket(key, limits.coreRate(), limits.coreBurst());
+    Mono<RateLimiter.Decision> checkout = checkoutDecision(exchange.getRequest(), subject);
+    return coreDecision
+        .flatMap(decision -> decision.allowed() ? checkout : Mono.just(decision))
         .flatMap(decision -> proceed(decision, exchange, chain));
+  }
+
+  /**
+   * The per-user window of the two state-changing checkout operations, counted only for requests
+   * the core bucket let through. Other methods and paths, and requests without a verified {@code
+   * sub}, are not counted.
+   */
+  private Mono<RateLimiter.Decision> checkoutDecision(ServerHttpRequest request, String subject) {
+    if (subject == null || !HttpMethod.POST.equals(request.getMethod())) {
+      return Mono.just(RateLimiter.Decision.permit());
+    }
+    String path = request.getPath().value();
+    if (path.equals(CHECKOUT_RESERVATIONS)) {
+      return limiter.perMinute(
+          "checkout:reservation:sub:" + subject, limits.checkoutReservationRate());
+    }
+    if (path.equals(ORDERS)) {
+      return limiter.perMinute("checkout:order:sub:" + subject, limits.orderRate());
+    }
+    return Mono.just(RateLimiter.Decision.permit());
   }
 
   private static Mono<Void> proceed(
