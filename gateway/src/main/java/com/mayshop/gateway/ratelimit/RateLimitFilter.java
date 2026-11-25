@@ -2,12 +2,13 @@ package com.mayshop.gateway.ratelimit;
 
 import com.mayshop.gateway.error.ProblemResponses;
 import com.nimbusds.jwt.SignedJWT;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -31,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Runs right after {@code AccessCookieFilter}, so an {@code Authorization} header is present
  * only when the access cookie was verified; its {@code sub} keys the core bucket. The client IP is
- * the connection's remote address: {@code X-Forwarded-For} is not trusted in this phase.
+ * resolved by {@link ClientIpResolver}: {@code X-Forwarded-For} counts only from trusted proxies.
  */
 public class RateLimitFilter implements GlobalFilter, Ordered {
 
@@ -43,15 +44,23 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
   private static final String REFRESH_COOKIE = "refresh_token";
   private static final int MAX_LOGIN_BODY_BYTES = 64 * 1024;
 
+  private static final Logger LOG = LoggerFactory.getLogger(RateLimitFilter.class);
+
   private final RateLimiter limiter;
   private final RateLimitProperties limits;
   private final JsonMapper json;
+  private final ClientIpResolver clientIps;
 
   /** Creates the filter. */
-  public RateLimitFilter(RateLimiter limiter, RateLimitProperties limits, JsonMapper json) {
+  public RateLimitFilter(
+      RateLimiter limiter,
+      RateLimitProperties limits,
+      JsonMapper json,
+      ClientIpResolver clientIps) {
     this.limiter = limiter;
     this.limits = limits;
     this.json = json;
+    this.clientIps = clientIps;
   }
 
   @Override
@@ -66,20 +75,21 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
     if (path.equals(CART_PREFIX) || path.startsWith(CART_PREFIX + "/")) {
       return chain.filter(exchange);
     }
+    if (!path.startsWith("/api/")) {
+      return chain.filter(exchange);
+    }
+    String ip = clientIps.resolve(request);
+    LOG.debug("Client IP {} for {} {}", ip, request.getMethod(), path);
     if (path.equals(LOGIN) && HttpMethod.POST.equals(request.getMethod())) {
-      return login(exchange, chain);
+      return login(exchange, chain, ip);
     }
     if (path.equals(REFRESH) && HttpMethod.POST.equals(request.getMethod())) {
       return refresh(exchange, chain);
     }
-    if (path.startsWith("/api/")) {
-      return core(exchange, chain);
-    }
-    return chain.filter(exchange);
+    return core(exchange, chain, ip);
   }
 
-  private Mono<Void> login(ServerWebExchange exchange, GatewayFilterChain chain) {
-    String ip = clientIp(exchange);
+  private Mono<Void> login(ServerWebExchange exchange, GatewayFilterChain chain, String ip) {
     return DataBufferUtils.join(exchange.getRequest().getBody(), MAX_LOGIN_BODY_BYTES)
         .map(buffer -> {
           byte[] bytes = new byte[buffer.readableByteCount()];
@@ -115,9 +125,9 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
         .flatMap(decision -> proceed(decision, exchange, chain));
   }
 
-  private Mono<Void> core(ServerWebExchange exchange, GatewayFilterChain chain) {
+  private Mono<Void> core(ServerWebExchange exchange, GatewayFilterChain chain, String ip) {
     String subject = subject(exchange.getRequest().getHeaders());
-    String key = subject != null ? "core:sub:" + subject : "core:ip:" + clientIp(exchange);
+    String key = subject != null ? "core:sub:" + subject : "core:ip:" + ip;
     Mono<RateLimiter.Decision> coreDecision =
         limiter.bucket(key, limits.coreRate(), limits.coreBurst());
     Mono<RateLimiter.Decision> checkout = checkoutDecision(exchange.getRequest(), subject);
@@ -182,14 +192,6 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
     } catch (java.text.ParseException | RuntimeException e) {
       return null;
     }
-  }
-
-  private static String clientIp(ServerWebExchange exchange) {
-    InetSocketAddress remote = exchange.getRequest().getRemoteAddress();
-    if (remote == null || remote.getAddress() == null) {
-      return "unknown";
-    }
-    return remote.getAddress().getHostAddress();
   }
 
   private static ServerWebExchange withBody(ServerWebExchange exchange, byte[] body) {

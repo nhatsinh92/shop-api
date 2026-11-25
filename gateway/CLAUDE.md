@@ -58,7 +58,16 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
   cookie (`GATEWAY_REFRESH_PER_SESSION_PER_MINUTE`, 10), unlimited without the cookie; other `/api/**`
   routes use a token bucket (`GATEWAY_CORE_RATE` 20/s, `GATEWAY_CORE_BURST` 40) keyed by the verified
   `sub`, else the client IP. `/api/cart/**` is never limited.
-- Client IP is the connection's remote address; `X-Forwarded-For` is not trusted (Phase 6).
+- Client IP (`ClientIpResolver`): the connection's remote address, unless it is inside
+  `GATEWAY_TRUSTED_PROXIES` (comma-separated IPv4/IPv6 CIDRs, default empty, an invalid entry fails
+  startup). Then it is the right-most `X-Forwarded-For` entry that is not itself trusted (entries a
+  client prepends sit left of the proxy chain and are ignored); all entries trusted: the left-most;
+  a missing or unparsable header: the remote address. Empty list = `X-Forwarded-For` ignored.
+  It keys the per-IP login limit and the IP fallback of the core bucket. Production: set it to the
+  ingress CIDR only (never `0.0.0.0/0`), and make the ingress append to, not trust, client
+  `X-Forwarded-For`. The demo compose file trusts the private Docker ranges.
+- `LOGGING_LEVEL_COM_MAYSHOP_GATEWAY_RATELIMIT=DEBUG` logs `Client IP <ip> for <method> <path>` for
+  rate-limited routes (never at INFO).
 - `RedisRateLimiter` runs Lua scripts (`resources/ratelimit/`). It **fails open** with a WARN when Redis
   is unreachable; Redis health is excluded from `/actuator/health` for that reason.
 - Denials are 429 `RATE_LIMITED` problems with `Retry-After` (`ProblemResponses`). Settings:
