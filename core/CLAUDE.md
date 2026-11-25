@@ -93,6 +93,8 @@ void listProductsMatchesTheContract() throws Exception {
     location `db/migration/product`, schema `product`.
   - `modulith` (event publication registry): the `@Order(20)` `modulithMigration` bean in the same
     class: location `db/migration/modulith`, schema `modulith`.
+  - `checkout`: the `@Order(30)` `checkoutMigration` bean in `CheckoutMigrationConfiguration`
+    (`checkout.persistence`): location `db/migration/checkout`, schema `checkout`.
 - To add a module's migration, declare an `@Order`ed `ModuleMigration` bean (the interface is in
   the application root package `com.mayshop.core`) in a configuration class in the module's own
   package. Its `flyway(dataSource)` returns a `Flyway` built with `Flyway.configure()` (its
