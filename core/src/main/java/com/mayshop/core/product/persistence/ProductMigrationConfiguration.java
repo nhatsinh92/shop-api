@@ -1,18 +1,15 @@
 package com.mayshop.core.product.persistence;
 
+import com.mayshop.core.ModuleMigration;
 import org.flywaydb.core.Flyway;
-import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 
 /**
- * Migrates the {@code product} schema with its own Flyway instance: its own location, schema and
- * history table, separate from the auth module's (which {@code spring.flyway} still configures).
- *
- * <p>Boot's Flyway auto-configuration backs off once any {@link Flyway} bean exists, so the auth
- * instance stays the auto-configured bean (same location, schema and history table as before) and
- * each further module adds its own instance in a {@link FlywayMigrationStrategy} like this one. The
- * strategy only runs when Flyway is auto-configured, so slices without a database are unaffected.
+ * Declares the migrations of the {@code product} schema and of the {@code modulith} event
+ * publication registry as {@link ModuleMigration} beans, each with its own location, schema and
+ * history table. The strategy that runs them (after auth) is in the application root package.
  */
 @Configuration(proxyBeanMethods = false)
 class ProductMigrationConfiguration {
@@ -23,33 +20,24 @@ class ProductMigrationConfiguration {
   static final String MODULITH_SCHEMA = "modulith";
 
   @Bean
-  FlywayMigrationStrategy productMigrationStrategy() {
-    return auth -> {
-      auth.migrate();
-      productFlyway(auth).migrate();
-      modulithFlyway(auth).migrate();
-    };
+  @Order(10)
+  ModuleMigration productMigration() {
+    return dataSource -> flyway(dataSource, LOCATION, SCHEMA);
   }
 
-  /**
-   * The event publication registry of Spring Modulith: schema {@code modulith}, own history table.
-   */
-  static Flyway modulithFlyway(Flyway auth) {
-    return Flyway.configure()
-        .dataSource(auth.getConfiguration().getDataSource())
-        .locations(MODULITH_LOCATION)
-        .schemas(MODULITH_SCHEMA)
-        .defaultSchema(MODULITH_SCHEMA)
-        .createSchemas(true)
-        .load();
+  /** The event publication registry of Spring Modulith: schema {@code modulith}. */
+  @Bean
+  @Order(20)
+  ModuleMigration modulithMigration() {
+    return dataSource -> flyway(dataSource, MODULITH_LOCATION, MODULITH_SCHEMA);
   }
 
-  static Flyway productFlyway(Flyway auth) {
+  private static Flyway flyway(javax.sql.DataSource dataSource, String location, String schema) {
     return Flyway.configure()
-        .dataSource(auth.getConfiguration().getDataSource())
-        .locations(LOCATION)
-        .schemas(SCHEMA)
-        .defaultSchema(SCHEMA)
+        .dataSource(dataSource)
+        .locations(location)
+        .schemas(schema)
+        .defaultSchema(schema)
         .createSchemas(true)
         .load();
   }
