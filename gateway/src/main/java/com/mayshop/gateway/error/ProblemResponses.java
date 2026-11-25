@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,6 +41,25 @@ public final class ProblemResponses {
   /** Answers 404 {@code NOT_FOUND}. */
   public static Mono<Void> notFound(ServerWebExchange exchange) {
     return write(exchange, HttpStatus.NOT_FOUND, "Not found", "NOT_FOUND", null);
+  }
+
+  /**
+   * Answers 503 {@code SERVICE_UNAVAILABLE} as the gateway fallback: {@code Retry-After} in seconds
+   * and {@code Cache-Control: no-store}, so no cache keeps the answer. The cause is logged in one
+   * line without a stack trace, because a fallback storm must not flood the log.
+   */
+  public static Mono<Void> fallback(
+      ServerWebExchange exchange, long retryAfterSeconds, String route, String reason) {
+    HttpHeaders headers = exchange.getResponse().getHeaders();
+    headers.set(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
+    headers.setCacheControl(CacheControl.noStore());
+    LOG.warn("Gateway fallback route={} reason={}", route, reason);
+    return write(
+        exchange,
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Service unavailable",
+        "SERVICE_UNAVAILABLE",
+        null);
   }
 
   static Mono<Void> write(

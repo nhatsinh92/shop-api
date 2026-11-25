@@ -17,7 +17,9 @@ spring:
           httpclient:
             connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:200}
           # Order matters: specific routes first, the catch-all core route last. No route configures
-          # a Retry filter: a write must never be replayed by the edge.
+          # a Retry filter: a write must never be replayed by the edge. Breakers (the
+          # Breaker filter, Spring Cloud Gateway's CircuitBreaker minus /api/auth/**) exist only on
+          # cart-read, cart-write and core; order-write, reservation-write and /api/auth/** have none.
           routes:
             - id: cart-read
               uri: ${CART_SERVICE_URL:http://localhost:8082}
@@ -26,12 +28,22 @@ spring:
                 - Method=GET,HEAD
               metadata:
                 response-timeout: ${GATEWAY_CART_READ_TIMEOUT:300}
+              filters:
+                - name: Breaker
+                  args:
+                    name: cart-read
+                    statusCodes: 500,502,503,504
             - id: cart-write
               uri: ${CART_SERVICE_URL:http://localhost:8082}
               predicates:
                 - Path=/api/cart/**
               metadata:
                 response-timeout: ${GATEWAY_CART_WRITE_TIMEOUT:2000}
+              filters:
+                - name: Breaker
+                  args:
+                    name: cart-write
+                    statusCodes: 500,502,503,504
             - id: order-write
               uri: ${CORE_URL:http://localhost:8081}
               predicates:
@@ -52,6 +64,11 @@ spring:
                 - Path=/api/**
               metadata:
                 response-timeout: ${GATEWAY_CORE_TIMEOUT:1000}
+              filters:
+                - name: Breaker
+                  args:
+                    name: core
+                    statusCodes: 500,502,503,504
 
 gateway:
   auth:
@@ -72,6 +89,35 @@ gateway:
     core-burst: ${GATEWAY_CORE_BURST:40}
     checkout-reservation-rate: ${GATEWAY_CHECKOUT_RESERVATION_RATE:10}
     order-rate: ${GATEWAY_ORDER_RATE:20}
+
+# One breaker per upstream class. Every value is overridable by an environment variable; a call is
+# slow when it lasts as long as the route's timeout. The time limiter is disabled below, so the
+# route's response-timeout is the only time bound (a 1 s default limiter would cut cart writes).
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: ${GATEWAY_BREAKER_WINDOW:20}
+        minimum-number-of-calls: ${GATEWAY_BREAKER_MIN_CALLS:10}
+        failure-rate-threshold: ${GATEWAY_BREAKER_FAILURE_RATE:50}
+        slow-call-rate-threshold: ${GATEWAY_BREAKER_SLOW_RATE:50}
+        wait-duration-in-open-state: ${GATEWAY_BREAKER_OPEN_SECONDS:10}s
+        permitted-number-of-calls-in-half-open-state: ${GATEWAY_BREAKER_HALF_OPEN_CALLS:5}
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      cart-read:
+        base-config: default
+        slow-call-duration-threshold: ${GATEWAY_CART_READ_TIMEOUT:300}ms
+      cart-write:
+        base-config: default
+        slow-call-duration-threshold: ${GATEWAY_CART_WRITE_TIMEOUT:2000}ms
+      core:
+        base-config: default
+        slow-call-duration-threshold: ${GATEWAY_CORE_TIMEOUT:1000}ms
+
+spring.cloud.circuitbreaker.resilience4j:
+  disable-time-limiter: true
 
 management:
   # Prometheus is served on the internal management port only; the app port exposes health and info.
