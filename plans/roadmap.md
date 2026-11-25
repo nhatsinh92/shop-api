@@ -11,7 +11,7 @@ Java 21, Spring Boot 4.0 (see "Deviations"), Gradle.
 | 2 | [Auth + gateway](epics/auth-gateway.md) | Login, refresh with rotation and grace period, logout, JWKS endpoint; gateway JWT verification, cookie → Bearer, routes, Redis rate limit | Expired token refresh works; revoked refresh token rejected; gateway rejects bad JWT | Done (#42) |
 | 3 | [Product](epics/product.md) | Catalog, product detail, flash-sale list, approximate stock; `product.updated` events | Seeded catalog served; event emitted on change (feeds FE `revalidateTag`) | Done (#69) |
 | 4 | [Cart](epics/cart.md) | Redis hash per user, add / update / remove with atomic ops, guest cart + merge on login, enriched response, write-behind to Postgres via Redpanda | p95 under 50 ms locally under k6; concurrency test passes | Done (#99) |
-| 5 | [Checkout + order](epics/checkout-order.md) | Price and stock confirmation, stock reservation with 10-minute TTL, order placement with `Idempotency-Key`, mock payment (success / fail / timeout), COD | Double submit creates one order; expired reservation releases stock | Epic drafted (awaiting approval) |
+| 5 | [Checkout + order](epics/checkout-order.md) | Price and stock confirmation, stock reservation with 10-minute TTL, order placement with `Idempotency-Key`, mock payment (success / fail / timeout), COD | Double submit creates one order; expired reservation releases stock | Done (#130) |
 | 6 | Peak readiness | Circuit breakers and timeouts, cache warm-up job, feature flags, k6 scenarios, `make demo-peak` with toxiproxy | Slowed cart-service still returns within budget via fallbacks; dashboards show latency and fallback rate | Not started |
 
 ## Cross-repo dependencies
