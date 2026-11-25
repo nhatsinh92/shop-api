@@ -51,4 +51,22 @@ public interface ReservationStore {
   default boolean markExpired(UUID id, Instant now) {
     throw new UnsupportedOperationException();
   }
+
+  /**
+   * Marks an {@code ACTIVE} reservation {@code CONSUMED}.
+   *
+   * @return false when it was not active
+   */
+  default boolean markConsumed(UUID id) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets {@code restocked_at} of a {@code CONSUMED} reservation, once.
+   *
+   * @return false when it was not consumed or had been restocked already
+   */
+  default boolean markRestocked(UUID id, Instant now) {
+    throw new UnsupportedOperationException();
+  }
 }

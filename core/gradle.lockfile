@@ -213,6 +213,7 @@ org.testcontainers:testcontainers-junit-jupiter:2.0.5=testCompileClasspath,testR
 org.testcontainers:testcontainers-postgresql:2.0.5=testCompileClasspath,testRuntimeClasspath
 org.testcontainers:testcontainers-redpanda:2.0.5=testCompileClasspath,testRuntimeClasspath
 org.testcontainers:testcontainers:2.0.5=testCompileClasspath,testRuntimeClasspath
+org.wiremock:wiremock-standalone:3.13.1=testCompileClasspath,testRuntimeClasspath
 org.xerial.snappy:snappy-java:1.1.10.9=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.xmlresolver:xmlresolver:6.1.0=checkstyle
 org.xmlunit:xmlunit-core:2.10.4=testCompileClasspath,testRuntimeClasspath

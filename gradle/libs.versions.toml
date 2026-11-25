@@ -5,6 +5,7 @@ spring-cloud = "2025.1.5"
 spring-modulith = "2.0.10"
 archunit = "1.4.2"
 networknt-json-schema = "1.5.9"
+wiremock = "3.13.1"
 spotless = "8.11.0"
 checkstyle = "14.4.0"
 jacoco = "0.8.16"
@@ -14,6 +15,7 @@ spring-cloud-bom = { module = "org.springframework.cloud:spring-cloud-dependenci
 spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "networknt-json-schema" }
+wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

@@ -39,6 +39,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation(libs.archunit.junit5)
     testImplementation(libs.networknt.json.schema.validator)
+    testImplementation(libs.wiremock.standalone)
     testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 

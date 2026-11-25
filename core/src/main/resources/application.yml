@@ -88,6 +88,11 @@ checkout:
   payment:
     # Comma-separated method ids (COD, EWALLET, CARD) shown as unavailable.
     disabled-methods: ${CHECKOUT_DISABLED_PAYMENT_METHODS:}
+    # The mock payment gateway; connect timeout is fixed at 500 ms, the read timeout is configurable.
+    url: ${PAYMENT_URL:http://localhost:8090}
+    timeout: ${PAYMENT_TIMEOUT:3s}
+    # Demo only: forward the X-Mock-Outcome header (fail | timeout) to the gateway.
+    mock-outcome-header: ${PAYMENT_MOCK_OUTCOME_HEADER:false}
   sweep:
     # Gives the stock of expired reservations back; false turns the sweep off (tests).
     enabled: ${CHECKOUT_SWEEP_ENABLED:true}
