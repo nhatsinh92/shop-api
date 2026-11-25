@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -53,7 +54,7 @@ public class OrderPlacement {
   private final IdempotencyStore idempotency;
   private final OrderNumberGenerator numbers;
   private final OrderStore orders;
-  private final TransactionTemplate tx;
+  private final ObjectProvider<PlatformTransactionManager> transactions;
   private final Clock clock;
 
   OrderPlacement(
@@ -63,7 +64,7 @@ public class OrderPlacement {
       IdempotencyStore idempotency,
       OrderNumberGenerator numbers,
       OrderStore orders,
-      PlatformTransactionManager transactions,
+      ObjectProvider<PlatformTransactionManager> transactions,
       Clock clock) {
     this.reservations = reservations;
     this.shipping = shipping;
@@ -71,7 +72,7 @@ public class OrderPlacement {
     this.idempotency = idempotency;
     this.numbers = numbers;
     this.orders = orders;
-    this.tx = new TransactionTemplate(transactions);
+    this.transactions = transactions;
     this.clock = clock;
   }
 
@@ -83,7 +84,9 @@ public class OrderPlacement {
   public Placed place(PlaceOrder request) {
     Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MICROS);
     try {
-      return tx.execute(status -> placeInTransaction(request, now));
+      // Resolved per call: contexts without a database have no transaction manager.
+      return new TransactionTemplate(transactions.getObject())
+          .execute(status -> placeInTransaction(request, now));
     } catch (OrderProblemException e) {
       if (e.status() == 410 && "CHECKOUT_RESERVATION_EXPIRED".equals(e.code())) {
         releaseExpired(request.reservationId(), now);
