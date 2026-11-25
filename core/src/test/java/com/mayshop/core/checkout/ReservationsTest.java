@@ -21,6 +21,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,9 +40,8 @@ class ReservationsTest {
   private Reservations reservations;
 
   @BeforeEach
-  @SuppressWarnings("unchecked")
   void setUp() {
-    ObjectProvider<Clock> clock = mock(ObjectProvider.class);
+    ObjectProvider<Clock> clock = mock();
     when(clock.getIfAvailable(any())).thenReturn(Clock.fixed(NOW, ZoneOffset.UTC));
     reservations = new Reservations(store, holds, clock);
   }
@@ -80,9 +80,7 @@ class ReservationsTest {
     assertThat(store.get(second.id()).status()).isEqualTo(Status.ACTIVE);
     assertThat(store.findActiveForUpdate(USER)).containsExactly(second);
 
-    @SuppressWarnings("unchecked")
-    ArgumentCaptor<java.util.Collection<ReleaseLine>> released =
-        ArgumentCaptor.forClass(java.util.Collection.class);
+    ArgumentCaptor<Collection<ReleaseLine>> released = ArgumentCaptor.captor();
     verify(holds).release(released.capture());
     assertThat(released.getValue()).containsExactly(new ReleaseLine("A", 2, true));
   }
