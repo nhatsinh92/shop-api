@@ -167,27 +167,24 @@ public class StockHolds {
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public void release(Collection<ReleaseLine> lines) {
-    Map<String, ReleaseLine> merged = new TreeMap<>();
-    lines.forEach(line ->
-        merged.merge(
-            line.sku(),
-            line,
-            (a, b) ->
-                new ReleaseLine(
-                    a.sku(), a.quantity() + b.quantity(), a.tookSaleStock() || b.tookSaleStock())));
+    List<ReleaseLine> sorted =
+        lines.stream().sorted(Comparator.comparing(ReleaseLine::sku)).toList();
     Map<String, LookupRow> rows =
-        lookup.findBySkus(merged.keySet()).stream()
+        lookup.findBySkus(sorted.stream().map(ReleaseLine::sku).distinct().toList()).stream()
             .collect(Collectors.toMap(LookupRow::sku, row -> row));
-    merged.values().stream()
-        .sorted(Comparator.comparing(ReleaseLine::sku))
+    sorted.stream()
         .filter(line -> rows.containsKey(line.sku()))
         .forEach(line -> {
           store.give(line.sku(), line.quantity());
           if (line.tookSaleStock()) {
             store.giveSaleStock(line.sku(), line.quantity());
           }
-          publishStockChange(rows.get(line.sku()));
         });
+    sorted.stream()
+        .map(ReleaseLine::sku)
+        .distinct()
+        .filter(rows::containsKey)
+        .forEach(sku -> publishStockChange(rows.get(sku)));
   }
 
   private HeldLine heldLine(LookupRow row, int quantity, MemberTier tier, Instant now) {
