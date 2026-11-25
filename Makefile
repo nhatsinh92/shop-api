@@ -77,6 +77,9 @@ demo-peak: $(DEMO_SECRETS) ## Demo plus toxiproxy in front of cart-service, a k6
 demo-down: ## Stop the demo stack (keeps the database volume)
 	$(COMPOSE_PEAK) down
 
+cart-restore: $(DEMO_SECRETS) ## Rebuild lost Redis carts from cart_snapshot (one-off cart-service container; the demo stack must run)
+	$(COMPOSE) run --rm --no-deps cart-service --cart.restore=true
+
 seed: $(DEMO_SECRETS) ## Reload the sample catalog into the running demo database
 	$(COMPOSE) run --rm seed
 

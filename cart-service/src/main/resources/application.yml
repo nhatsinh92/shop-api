@@ -68,4 +68,6 @@ product:
     cache-ttl: 60s
 
 cart:
+  snapshot-cleanup:
+    cron: ${CART_SNAPSHOT_CLEANUP_CRON:0 30 3 * * *}
   placeholder-image-url: ${CART_PLACEHOLDER_IMAGE_URL:http://localhost:3000/images/cart-placeholder.svg}
