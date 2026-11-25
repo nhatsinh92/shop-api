@@ -11,6 +11,8 @@ import java.util.UUID;
  * @param shippingAddressJson the address as sent, stored as is ({@code district} left out when
  *     absent)
  * @param note may be null
+ * @param mockOutcome the {@code X-Mock-Payment-Outcome} header ({@code fail} or {@code timeout}),
+ *     or null
  */
 public record PlaceOrder(
     UUID userId,
@@ -20,4 +22,5 @@ public record PlaceOrder(
     String shippingOptionId,
     Payments.Method paymentMethod,
     String shippingAddressJson,
-    String note) {}
+    String note,
+    String mockOutcome) {}

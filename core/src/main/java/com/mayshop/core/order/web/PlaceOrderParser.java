@@ -82,7 +82,8 @@ final class PlaceOrderParser {
         shippingOption,
         Payments.Method.valueOf(method),
         JSON.writeValueAsString(address),
-        note);
+        note,
+        mockOutcome);
   }
 
   private static String enumValue(

@@ -86,6 +86,65 @@ public class OrderStore {
     }
   }
 
+  /** An order locked for a state change. */
+  public record Locked(UUID id, UUID userId, UUID reservationId, String status, String method) {}
+
+  /** The order row, locked until the caller's transaction ends; empty when it does not exist. */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Optional<Locked> lock(UUID id) {
+    return jdbc.sql(
+            """
+            select id, user_id, reservation_id, status, payment_method
+              from orders.orders where id = ? for update
+            """)
+        .param(id)
+        .query(OrderStore::locked)
+        .optional();
+  }
+
+  /**
+   * Orders still {@code PENDING_PAYMENT} that were created at or before {@code cutoff}, locked with
+   * {@code SKIP LOCKED} so concurrent runs take different rows.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public List<Locked> lockStalePending(Instant cutoff, int limit) {
+    return jdbc.sql(
+            """
+            select id, user_id, reservation_id, status, payment_method
+              from orders.orders
+             where status = 'PENDING_PAYMENT' and created_at <= ?
+             order by created_at
+             limit ? for update skip locked
+            """)
+        .param(Timestamp.from(cutoff))
+        .param(limit)
+        .query(OrderStore::locked)
+        .list();
+  }
+
+  /** Sets the status and the payment status of an order. */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void updateStatus(UUID id, String status, String paymentStatus, Instant now) {
+    jdbc.sql(
+            """
+            update orders.orders set status = ?, payment_status = ?, updated_at = ? where id = ?
+            """)
+        .param(status)
+        .param(paymentStatus)
+        .param(Timestamp.from(now))
+        .param(id)
+        .update();
+  }
+
+  private static Locked locked(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+    return new Locked(
+        rs.getObject("id", UUID.class),
+        rs.getObject("user_id", UUID.class),
+        rs.getObject("reservation_id", UUID.class),
+        rs.getString("status"),
+        rs.getString("payment_method"));
+  }
+
   /** The order, only when it belongs to {@code userId}. */
   @Transactional(readOnly = true)
   public Optional<OrderView> find(UUID id, UUID userId) {
