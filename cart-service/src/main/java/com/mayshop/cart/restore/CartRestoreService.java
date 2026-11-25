@@ -54,24 +54,20 @@ public class CartRestoreService {
   public Result restore() {
     // Fail fast when Redis is down, even if there is nothing to restore.
     redis.execute((RedisCallback<String>) connection -> connection.ping());
-    long restored = 0;
-    long existing = 0;
-    long expired = 0;
-    long malformed = 0;
+    long[] counts = new long[Outcome.values().length];
     String after = "";
     List<StoredCart> page;
     do {
       page = store.findPage(after, PAGE_SIZE);
       for (StoredCart cart : page) {
         after = cart.cartKey();
-        switch (restoreOne(cart)) {
-          case RESTORED -> restored++;
-          case EXISTING -> existing++;
-          case EXPIRED -> expired++;
-          case MALFORMED -> malformed++;
-        }
+        counts[restoreOne(cart).ordinal()]++;
       }
     } while (page.size() == PAGE_SIZE);
+    long restored = counts[Outcome.RESTORED.ordinal()];
+    long existing = counts[Outcome.EXISTING.ordinal()];
+    long expired = counts[Outcome.EXPIRED.ordinal()];
+    long malformed = counts[Outcome.MALFORMED.ordinal()];
     Result result = new Result(restored, existing, expired, malformed);
     LOG.info(
         "Cart restore finished: restored={} skippedExisting={} skippedExpired={} malformed={}",
