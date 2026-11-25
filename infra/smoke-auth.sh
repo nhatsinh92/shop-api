@@ -17,6 +17,11 @@ Environment:
   SMOKE_EMAIL     demo user email (default linh@example.com, see seed/README.md)
   SMOKE_PASSWORD  demo user password (default linh-gold-2026)
   WEB_ORIGIN      allowed web origin (default http://localhost:3000)
+  WEB_URL         shop-web base URL for the client-IP check (default http://127.0.0.1:3000); the check
+                  is SKIPPED when shop-web is not running or the gateway logs cannot be read
+  SMOKE_CLIENT_IP the client address shop-web sees from this script (default 127.0.0.1)
+  GATEWAY_LOG_CMD command printing the gateway log (default: docker compose logs gateway); the
+                  gateway must run with LOGGING_LEVEL_COM_MAYSHOP_GATEWAY_RATELIMIT=DEBUG
   REQUIRE_ORIGIN_CHECK
                   1 = fail (instead of skipping with a note) when the gateway does not reject a
                   foreign Origin; set it once the gateway Origin check (CORS task) is merged
@@ -137,6 +142,28 @@ elif [ "${REQUIRE_ORIGIN_CHECK:-0}" = "1" ]; then
   fail "expected HTTP 403 AUTH_FORBIDDEN for a foreign Origin, got $STATUS"
 else
   echo "   SKIPPED: got $STATUS, the gateway Origin check is not merged yet (REQUIRE_ORIGIN_CHECK=1 makes this fatal)"
+fi
+
+echo "8. client IP through shop-web's /api/* rewrite"
+WEB_URL="${WEB_URL:-http://127.0.0.1:3000}"
+SMOKE_CLIENT_IP="${SMOKE_CLIENT_IP:-127.0.0.1}"
+if ! curl -sS -o /dev/null --max-time 3 "$WEB_URL/" 2>/dev/null; then
+  echo "   SKIPPED: shop-web is not running at $WEB_URL (make demo starts it)"
+else
+  # shellcheck disable=SC2206
+  log_cmd=(${GATEWAY_LOG_CMD:-docker compose -f infra/docker-compose.yml logs --no-color gateway})
+  marker="$("${log_cmd[@]}" 2>/dev/null | grep -c 'Client IP' || true)"
+  call 200 -X POST "${json[@]}" "${origin[@]}" -d "$login_json" "$WEB_URL/api/auth/login"
+  sleep 1
+  seen="$("${log_cmd[@]}" 2>/dev/null | grep 'Client IP' | tail -n +"$((marker + 1))" \
+    | grep 'POST /api/auth/login' | tail -n 1 | sed -E 's/.*Client IP ([^ ]+) for.*/\1/')" || true
+  if [ -z "$seen" ]; then
+    echo "   SKIPPED: no 'Client IP' log line; run the gateway with LOGGING_LEVEL_COM_MAYSHOP_GATEWAY_RATELIMIT=DEBUG and readable logs"
+  elif [ "$seen" = "$SMOKE_CLIENT_IP" ]; then
+    echo "   gateway saw client IP $seen from X-Forwarded-For"
+  else
+    fail "gateway resolved client IP $seen, expected $SMOKE_CLIENT_IP: the shop-web rewrite does not send X-Forwarded-For, or the proxy is not trusted (stop and comment on issue 173)"
+  fi
 fi
 
 echo "auth smoke check passed"

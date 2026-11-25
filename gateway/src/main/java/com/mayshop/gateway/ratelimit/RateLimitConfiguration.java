@@ -10,7 +10,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Wires the Redis rate limits into the gateway. */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(RateLimitProperties.class)
+@EnableConfigurationProperties({RateLimitProperties.class, ClientIpProperties.class})
 public class RateLimitConfiguration {
 
   @Bean
@@ -19,8 +19,14 @@ public class RateLimitConfiguration {
   }
 
   @Bean
-  RateLimitFilter rateLimitFilter(RateLimiter limiter, RateLimitProperties properties) {
-    return new RateLimitFilter(limiter, properties, JsonMapper.builder().build());
+  ClientIpResolver clientIpResolver(ClientIpProperties properties) {
+    return new ClientIpResolver(properties);
+  }
+
+  @Bean
+  RateLimitFilter rateLimitFilter(
+      RateLimiter limiter, RateLimitProperties properties, ClientIpResolver clientIps) {
+    return new RateLimitFilter(limiter, properties, JsonMapper.builder().build(), clientIps);
   }
 
   private static RedisScript<String> script(String name) {

@@ -176,6 +176,12 @@ services:
       AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:-mayshop-core}
       AUTH_JWT_AUDIENCE: ${AUTH_JWT_AUDIENCE:-mayshop}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      # Proxies whose X-Forwarded-For is trusted: the compose network and the Docker host gateway
+      # (the demo web server on the host reaches the published port through it). Private ranges,
+      # plus the IPv6 ULA range. In production set the ingress CIDR (see gateway/CLAUDE.md).
+      GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16,fd00::/8}
+      # Opt-in: DEBUG logs the resolved client IP (used by infra/smoke-auth.sh).
+      LOGGING_LEVEL_COM_MAYSHOP_GATEWAY_RATELIMIT: ${LOGGING_LEVEL_COM_MAYSHOP_GATEWAY_RATELIMIT:-INFO}
     ports: ["8080:8080"]
     depends_on:
       core: { condition: service_healthy }
