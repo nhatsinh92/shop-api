@@ -32,6 +32,8 @@ jobs:
           curl -fsS http://localhost:8081/actuator/health | grep -q '"status":"UP"'
           curl -fsS http://localhost:8082/actuator/health | grep -q '"status":"UP"'
           curl -fsS -X POST http://localhost:8090/payments | grep -q SUCCEEDED
+      - name: Cart smoke check through the gateway
+        run: make demo-smoke-cart
       - name: Logs on failure
         if: failure()
         run: docker compose -f infra/docker-compose.yml logs --no-color --tail=200
