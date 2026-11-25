@@ -100,6 +100,31 @@ class JdbcReservationStore implements ReservationStore {
   }
 
   @Override
+  public boolean markConsumed(UUID id) {
+    return jdbc.sql(
+                """
+                update checkout.reservations set status = 'CONSUMED'
+                 where id = ? and status = 'ACTIVE'
+                """)
+            .param(id)
+            .update()
+        == 1;
+  }
+
+  @Override
+  public boolean markRestocked(UUID id, Instant now) {
+    return jdbc.sql(
+                """
+                update checkout.reservations set restocked_at = ?
+                 where id = ? and status = 'CONSUMED' and restocked_at is null
+                """)
+            .param(Timestamp.from(now))
+            .param(id)
+            .update()
+        == 1;
+  }
+
+  @Override
   public void insert(Reservation reservation) {
     jdbc.sql(
             """

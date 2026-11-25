@@ -122,6 +122,76 @@ public class Reservations {
     return expired;
   }
 
+  /** One consumed line. */
+  public record ConsumedLine(String sku, int quantity, long unitPrice) {}
+
+  /** What {@link #consume} found. */
+  public sealed interface ConsumeResult {
+
+    /** The reservation was {@code ACTIVE} and is now {@code CONSUMED}. */
+    record Consumed(List<ConsumedLine> lines, long subtotal) implements ConsumeResult {}
+
+    /** Unknown, or not the caller's. */
+    record NotFound() implements ConsumeResult {}
+
+    /** {@code EXPIRED}, {@code RELEASED} or past {@code expiresAt}. */
+    record Expired() implements ConsumeResult {}
+
+    /** Already {@code CONSUMED}. */
+    record AlreadyConsumed() implements ConsumeResult {}
+  }
+
+  /**
+   * Consumes the caller's reservation inside the caller's transaction (it must run in one): locks
+   * the row and, when it is {@code ACTIVE} and {@code now < expiresAt}, marks it {@code CONSUMED}.
+   *
+   * <p>It never calls {@link #expire}: that runs in a new transaction and would wait for the lock
+   * this transaction holds. On {@link ConsumeResult.Expired} the caller calls {@code expire(id,
+   * now)} after its own transaction has rolled back.
+   */
+  @Transactional
+  public ConsumeResult consume(UUID id, UUID userId, Instant now) {
+    Optional<Reservation> found = store.findForUpdate(id).filter(r -> r.userId().equals(userId));
+    if (found.isEmpty()) {
+      return new ConsumeResult.NotFound();
+    }
+    Reservation reservation = found.get();
+    if (reservation.status() == Status.CONSUMED) {
+      return new ConsumeResult.AlreadyConsumed();
+    }
+    if (reservation.status() != Status.ACTIVE || !now.isBefore(reservation.expiresAt())) {
+      return new ConsumeResult.Expired();
+    }
+    if (!store.markConsumed(id)) {
+      return new ConsumeResult.Expired();
+    }
+    List<ConsumedLine> lines =
+        reservation.items().stream()
+            .map(item -> new ConsumedLine(item.sku(), item.quantity(), item.unitPrice()))
+            .toList();
+    return new ConsumeResult.Consumed(lines, reservation.subtotal());
+  }
+
+  /**
+   * Gives the stock of a consumed reservation back after a failed payment, at most once (guarded by
+   * {@code restocked_at}).
+   *
+   * @return true when this call released the stock
+   */
+  @Transactional
+  public boolean restock(UUID id) {
+    Instant now = Instant.now(clock).truncatedTo(ChronoUnit.MICROS);
+    Optional<Reservation> reservation = store.findForUpdate(id);
+    if (reservation.isEmpty() || !store.markRestocked(id, now)) {
+      return false;
+    }
+    holds.release(
+        reservation.get().items().stream()
+            .map(item -> new ReleaseLine(item.sku(), item.quantity(), item.tookSaleStock()))
+            .toList());
+    return true;
+  }
+
   private boolean expireLocked(Reservation reservation, Instant now) {
     if (reservation.status() != Status.ACTIVE || now.isBefore(reservation.expiresAt())) {
       return false;
