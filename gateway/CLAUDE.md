@@ -11,8 +11,17 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
 
 ## Responsibilities (from the plan)
 
-- Routes: `/api/cart/**` to `cart-service`, everything else under `/api/**` to `core`
-  (`src/main/resources/application.yml`, property prefix `spring.cloud.gateway.server.webflux`).
+- Routes, in order (`src/main/resources/application.yml`, property prefix
+  `spring.cloud.gateway.server.webflux`): `cart-read` (`GET`/`HEAD` `/api/cart/**`), `cart-write`
+  (other methods on `/api/cart/**`), `order-write` (`POST /api/orders`), `reservation-write`
+  (`POST /api/checkout/reservations`), then `core` (`/api/**`). Cart routes use `CART_SERVICE_URL`,
+  the others `CORE_URL`.
+- Timeouts: each route has `response-timeout` metadata in ms (`GATEWAY_CART_READ_TIMEOUT` 300,
+  `GATEWAY_CART_WRITE_TIMEOUT` 2000, `GATEWAY_ORDER_TIMEOUT` 5000, `GATEWAY_RESERVATION_TIMEOUT`
+  2000, `GATEWAY_CORE_TIMEOUT` 1000); connect timeout `GATEWAY_CONNECT_TIMEOUT` 200. No route has a
+  retry filter: never replay a write at the edge.
+- Metrics: `/actuator/prometheus` is served on `MANAGEMENT_PORT` (default 9080) only; the app port
+  exposes `health` and `info`. Never expose the management port publicly.
 - Phase 2: read the access token from the httpOnly cookie, verify it with the JWKS from `core`
   (cached), forward it as `Authorization: Bearer`; Redis-backed rate limiting per user and per IP;
   CORS only for the web origin; `Origin` check on state-changing requests.

@@ -14,16 +14,44 @@ spring:
     gateway:
       server:
         webflux:
+          httpclient:
+            connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:200}
+          # Order matters: specific routes first, the catch-all core route last. No route configures
+          # a Retry filter: a write must never be replayed by the edge.
           routes:
-            # Order matters: the cart route must come before the catch-all core route.
-            - id: cart-service
+            - id: cart-read
               uri: ${CART_SERVICE_URL:http://localhost:8082}
               predicates:
                 - Path=/api/cart/**
+                - Method=GET,HEAD
+              metadata:
+                response-timeout: ${GATEWAY_CART_READ_TIMEOUT:300}
+            - id: cart-write
+              uri: ${CART_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/cart/**
+              metadata:
+                response-timeout: ${GATEWAY_CART_WRITE_TIMEOUT:2000}
+            - id: order-write
+              uri: ${CORE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/orders
+                - Method=POST
+              metadata:
+                response-timeout: ${GATEWAY_ORDER_TIMEOUT:5000}
+            - id: reservation-write
+              uri: ${CORE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/checkout/reservations
+                - Method=POST
+              metadata:
+                response-timeout: ${GATEWAY_RESERVATION_TIMEOUT:2000}
             - id: core
               uri: ${CORE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/**
+              metadata:
+                response-timeout: ${GATEWAY_CORE_TIMEOUT:1000}
 
 gateway:
   auth:
@@ -46,10 +74,18 @@ gateway:
     order-rate: ${GATEWAY_ORDER_RATE:20}
 
 management:
+  # Prometheus is served on the internal management port only; the app port exposes health and info.
+  server:
+    port: ${MANAGEMENT_PORT:9080}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        spring.cloud.gateway.requests: true
+        http.server.requests: true
   health:
     # Rate limits fail open, so a Redis outage must not take the gateway out of rotation.
     redis:
