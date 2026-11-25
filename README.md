@@ -26,6 +26,9 @@ the `product.updated` record arrives and that the gateway does not route the int
 an expired session, then logs in, merges the guest cart and checks that the `cart_snapshot` row in the
 `cart` database has the version of the last write (`infra/smoke-cart.sh --help`). The `cart` database
 and role are created by the one-shot `cart-db` service, on a fresh or an existing volume.
+`make demo-smoke-checkout` reserves two SKUs, places a COD order, checks the idempotent replay, the
+reused key and the consumed reservation, then places e-wallet orders with the mock outcomes `fail` and
+`timeout` and checks that their stock is given back (`infra/smoke-checkout.sh --help`).
 `make demo-k6-cart` loads the cart through the gateway of a running `make demo` with k6 (50 VUs, 60 s,
 `infra/peak/k6/cart.js`) and exits non-zero when p95 of the cart requests is 50 ms or more or 1 % or
 more of the requests fail. Three VUs are the demo users and only read; the other 47 are guests with

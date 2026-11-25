@@ -18,7 +18,7 @@ COMPOSE := AUTH_JWT_PRIVATE_KEY="$$(cat $(DEMO_KEY) 2>/dev/null || true)" \
 	docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart demo-k6-cart seed lock test-scripts contract-breaking
+.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart demo-smoke-checkout demo-k6-cart seed lock test-scripts contract-breaking
 
 help: ## Show targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -88,6 +88,9 @@ demo-smoke-product: ## List, detail, availability, internal change and product.u
 
 demo-smoke-cart: ## Guest and signed-in cart operations, merge and cart snapshot of a running demo
 	bash infra/smoke-cart.sh
+
+demo-smoke-checkout: ## Reserve, COD order, idempotent replay, failed and timed-out payment of a running demo
+	bash infra/smoke-checkout.sh
 
 # MSYS_NO_PATHCONV=1 stops Git Bash on Windows from rewriting /scripts/cart.js to a host path.
 demo-k6-cart: ## k6 cart load (50 VUs, 60 s) through the gateway of a running demo; fails at p95 >= 50 ms or errors >= 1 %
