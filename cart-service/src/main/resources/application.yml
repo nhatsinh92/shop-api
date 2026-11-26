@@ -99,4 +99,9 @@ spring.cloud.circuitbreaker.resilience4j:
 cart:
   snapshot-cleanup:
     cron: ${CART_SNAPSHOT_CLEANUP_CRON:0 30 3 * * *}
+  # Reads the running flash sale from core on start-up and every interval, so its SKUs are cached.
+  warmup:
+    enabled: ${CART_WARMUP_ENABLED:true}
+    interval: ${CART_WARMUP_INTERVAL:60s}
+    timeout: ${CART_WARMUP_TIMEOUT:2s}
   placeholder-image-url: ${CART_PLACEHOLDER_IMAGE_URL:http://localhost:3000/images/cart-placeholder.svg}
