@@ -41,6 +41,13 @@ jobs:
       - name: Run the peak scenario
         id: peak
         continue-on-error: true
+        # About a third of peak.js's 50 / 50 / 20 VUs: the standard 4-vCPU runner carries the whole
+        # stack and k6, and at full load it saturated (#203). The thresholds are unchanged; the full
+        # load is `make demo-peak` on a developer machine.
+        env:
+          BROWSE_VUS: "17"
+          CART_VUS: "17"
+          CHECKOUT_VUS: "7"
         run: |
           ( while true; do
               date -u +%FT%TZ

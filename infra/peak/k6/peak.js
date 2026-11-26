@@ -176,16 +176,30 @@ function fallbackTotal() {
 }
 
 // One login per email, in parallel batches (the gateway allows 5 per email per minute).
+// A just-started core on a small runner can answer a BCrypt login after the gateway's 1 s core
+// route timeout (503) or not at all; those logins are retried, at most LOGIN_RETRIES more times
+// with a growing pause, which stays below the gateway's 5 logins per email per minute.
+const LOGIN_RETRIES = 3;
+
+function loginRequest(email) {
+  return {
+    method: 'POST',
+    url: `${BASE_URL}/api/auth/login`,
+    body: JSON.stringify({ email, password: PASSWORD }),
+    params: { headers: jsonHeaders, tags: { kind: 'setup' } },
+  };
+}
+
 function loginBatch(emails) {
-  const responses = http.batch(
-    emails.map((email) => ({
-      method: 'POST',
-      url: `${BASE_URL}/api/auth/login`,
-      body: JSON.stringify({ email, password: PASSWORD }),
-      params: { headers: jsonHeaders, tags: { kind: 'setup' } },
-    })),
-  );
-  return responses.map((res, i) => {
+  const results = http.batch(emails.map(loginRequest));
+  for (let retry = 1; retry <= LOGIN_RETRIES; retry++) {
+    const pending = emails.map((_, i) => i).filter((i) => results[i].status === 503 || results[i].status === 0);
+    if (pending.length === 0) break;
+    sleep(2 * retry);
+    const again = http.batch(pending.map((i) => loginRequest(emails[i])));
+    pending.forEach((i, j) => { results[i] = again[j]; });
+  }
+  return results.map((res, i) => {
     if (res.status !== 200) {
       throw new Error(`login failed for ${emails[i]}: HTTP ${res.status} (is the load seed loaded?)`);
     }

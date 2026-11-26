@@ -19,6 +19,10 @@ services:
       TOXIPROXY_URL: http://toxiproxy:8474
       PROMETHEUS_URL: http://prometheus:9090
       LOAD_PASSWORD: ${LOAD_PASSWORD:-load-test-2026}
+      # Optional load overrides (the nightly workflow lowers them); empty keeps peak.js's 50 / 50 / 20.
+      BROWSE_VUS: ${BROWSE_VUS:-}
+      CART_VUS: ${CART_VUS:-}
+      CHECKOUT_VUS: ${CHECKOUT_VUS:-}
     volumes: ["../build/k6:/results"]
     depends_on:
       toxiproxy: { condition: service_started }
