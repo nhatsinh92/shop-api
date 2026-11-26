@@ -36,10 +36,18 @@ spring:
       connect-timeout: 500ms
 
 management:
+  # Prometheus is served on the internal management port only; the app port exposes health and info.
+  server:
+    port: ${MANAGEMENT_PORT:9081}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        checkout.payment: true
   health:
     redis:
       # Redis only holds grace-period keys; core stays ready without it.
