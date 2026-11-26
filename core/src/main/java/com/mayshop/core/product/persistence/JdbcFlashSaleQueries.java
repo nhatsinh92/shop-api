@@ -43,6 +43,11 @@ class JdbcFlashSaleQueries implements FlashSaleQueries {
     this.placeholderImageUrl = placeholderImageUrl;
   }
 
+  /**
+   * The items are read after the sale query has returned: reading them from inside its row mapper
+   * would take a second pool connection while the first is still held, which deadlocks the pool
+   * under concurrent requests.
+   */
   @Override
   public Optional<SaleRow> findCurrent(Instant now) {
     return jdbc.sql(
@@ -55,13 +60,15 @@ class JdbcFlashSaleQueries implements FlashSaleQueries {
             OffsetDateTime.ofInstant(now, ZoneOffset.UTC),
             OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
         .query((rs, n) ->
-            new SaleRow(
+            new SaleHeader(
                 rs.getObject("id", UUID.class),
                 rs.getObject("starts_at", OffsetDateTime.class).toInstant(),
-                rs.getObject("ends_at", OffsetDateTime.class).toInstant(),
-                items(rs.getObject("id", UUID.class))))
-        .optional();
+                rs.getObject("ends_at", OffsetDateTime.class).toInstant()))
+        .optional()
+        .map(sale -> new SaleRow(sale.id(), sale.startsAt(), sale.endsAt(), items(sale.id())));
   }
+
+  private record SaleHeader(UUID id, Instant startsAt, Instant endsAt) {}
 
   private List<ItemRow> items(UUID saleId) {
     return jdbc.sql(ITEMS)
