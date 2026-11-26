@@ -1,5 +1,7 @@
 package com.mayshop.core.product.web;
 
+import com.mayshop.core.flags.FeatureFlags;
+import com.mayshop.core.flags.Flag;
 import com.mayshop.core.product.persistence.CatalogQueries;
 import com.mayshop.core.product.persistence.CatalogQueries.CardRow;
 import com.mayshop.core.product.persistence.FlashSaleQueries;
@@ -22,7 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * {@code listRecommendations} of {@code contracts/openapi/core.yaml}. The list is not personalised:
- * it depends only on {@code productSlug} and the catalog.
+ * it depends only on {@code productSlug} and the catalog. With the {@code RECOMMENDATIONS} flag off
+ * the list is empty and no query runs.
  */
 @RestController
 class RecommendationController {
@@ -38,16 +41,19 @@ class RecommendationController {
   private final RecommendationQueries related;
   private final CatalogQueries catalog;
   private final FlashSaleQueries flashSales;
+  private final FeatureFlags flags;
   private final Clock clock;
 
   RecommendationController(
       RecommendationQueries related,
       CatalogQueries catalog,
       FlashSaleQueries flashSales,
+      FeatureFlags flags,
       ObjectProvider<Clock> clock) {
     this.related = related;
     this.catalog = catalog;
     this.flashSales = flashSales;
+    this.flags = flags;
     this.clock = clock.getIfAvailable(Clock::systemUTC);
   }
 
@@ -56,6 +62,12 @@ class RecommendationController {
       @RequestParam(required = false) String productSlug,
       @RequestParam(required = false) String limit) {
     int max = parseLimit(limit);
+    if (!flags.isEnabled(Flag.RECOMMENDATIONS)) {
+      // Switched off during a peak: answer without touching Postgres.
+      return ResponseEntity.ok()
+          .header("Cache-Control", CACHE_CONTROL)
+          .body(new Recommendations(List.of()));
+    }
     List<CardRow> cards = null;
     if (productSlug != null && !productSlug.isBlank()) {
       cards = related.relatedTo(productSlug, max).orElse(null);
