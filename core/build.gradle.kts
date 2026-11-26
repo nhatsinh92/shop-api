@@ -10,6 +10,11 @@ dependencyManagement {
                 .get()
                 .toString(),
         )
+        mavenBom(
+            libs.spring.cloud.bom
+                .get()
+                .toString(),
+        )
     }
 }
 
@@ -26,6 +31,7 @@ dependencies {
     implementation("org.springframework.modulith:spring-modulith-events-jdbc")
     implementation("org.springframework.modulith:spring-modulith-events-kafka")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
