@@ -67,11 +67,13 @@ demo: $(DEMO_SECRETS) ## Start the full stack in Docker, wait until healthy, loa
 	@echo "mock payment http://localhost:8090/payments"
 	@echo "stop with: make demo-down"
 
-demo-peak: $(DEMO_SECRETS) ## Demo plus toxiproxy in front of cart-service, a k6 run and Grafana (:3001)
+demo-peak: $(DEMO_SECRETS) ## Demo plus toxiproxy in front of cart-service, the 3-minute k6 peak run (fails on a missed threshold) and Grafana (:3001)
 	$(COMPOSE_PEAK) up -d --build --wait \
 		postgres redis redpanda mock-payment core cart-service toxiproxy gateway prometheus grafana
-	$(COMPOSE) run --rm seed
-	$(COMPOSE_PEAK) run --rm k6
+	$(COMPOSE) run --rm -e SEED_LOAD_USERS=1 seed
+	mkdir -p build/k6 && chmod a+rwx build/k6
+	MSYS_NO_PATHCONV=1 $(COMPOSE_PEAK) run --rm k6 run --summary-export=/results/peak-summary.json /scripts/peak.js
+	@echo "k6 summary: build/k6/peak-summary.json"
 	@echo "grafana http://localhost:3001 (dashboard: Mây peak)  prometheus http://localhost:9090  toxiproxy API http://localhost:8474"
 
 flag: ## Switch a feature flag in the demo Redis: make flag NAME=online-payment VALUE=off (a Redis loss resets flags to their defaults)

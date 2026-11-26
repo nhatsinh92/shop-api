@@ -222,7 +222,7 @@ services:
   k6:
     profiles: [peak]
     image: grafana/k6:1.8.3
-    command: ["run", "/scripts/smoke.js"]
+    command: ["run", "/scripts/peak.js"]
     environment:
       BASE_URL: http://gateway:8080
     volumes: ["./peak/k6:/scripts:ro"]

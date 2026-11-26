@@ -11,3 +11,15 @@ services:
       GATEWAY_LOGIN_PER_IP_PER_MINUTE: "100000"
     depends_on:
       toxiproxy: { condition: service_started }
+
+  # k6 reaches toxiproxy (toxic API) and Prometheus (gateway_fallback_total) over the compose
+  # network; the summary lands in build/k6/ on the host (see `make demo-peak`).
+  k6:
+    environment:
+      TOXIPROXY_URL: http://toxiproxy:8474
+      PROMETHEUS_URL: http://prometheus:9090
+      LOAD_PASSWORD: ${LOAD_PASSWORD:-load-test-2026}
+    volumes: ["../build/k6:/results"]
+    depends_on:
+      toxiproxy: { condition: service_started }
+      prometheus: { condition: service_started }

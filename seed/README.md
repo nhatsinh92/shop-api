@@ -30,3 +30,15 @@ Passwords are stored as BCrypt hashes with cost 12.
 `make demo-smoke-product` reads the ANC Pro (`tai-nghe-khong-day-anc-pro`, three variants, stock 40
 each, flash sale price 890 000) and changes the price of `SKU-MOUSE-SIL` (not in the sale), so run `make seed` to
 restore the catalog after it.
+
+## Load users (`make demo-peak` only)
+
+`load-users.sql` creates 200 users `load-0001@example.com` to `load-0200@example.com`, tier
+`STANDARD`, all with the demo password below, for the k6 peak run (`infra/peak/k6/peak.js`).
+`seed.sh` loads them only when `SEED_LOAD_USERS=1`, which `make demo-peak` sets; `make demo` and
+`make seed` do not. Reloading is idempotent. The file also raises the stock of `SKU-BOTTLE-750` and
+`SKU-PAD-90` to 1 000 000 for the checkout scenario (`make seed` restores the catalog stock).
+
+**For the demo only. Never use this password anywhere else.**
+
+Load user password: `load-test-2026`
