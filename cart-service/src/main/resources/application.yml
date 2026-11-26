@@ -39,6 +39,14 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 management:
+  # Prometheus is served on the internal management port only; the app port exposes health and info
+  # (see management.AppPortActuatorConfiguration).
+  server:
+    port: ${MANAGEMENT_PORT:9082}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        cart.product_lookup: true
   health:
     # Neither Postgres nor the broker takes the service out of rotation.
     db:
@@ -46,7 +54,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
@@ -66,6 +74,27 @@ product:
     internal-token: ${INTERNAL_API_TOKEN:}
     timeout: ${PRODUCT_LOOKUP_TIMEOUT:150ms}
     cache-ttl: 60s
+    # How long a cached product may still be served when core fails, times out or the breaker is open.
+    stale-ttl: ${PRODUCT_LOOKUP_STALE_TTL:10m}
+
+# Breaker for the product lookup against core. A call is slow when it lasts as long as the lookup
+# timeout. The time limiter is disabled: the HTTP client's timeout is the only time bound.
+resilience4j:
+  circuitbreaker:
+    instances:
+      product-lookup:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: ${PRODUCT_LOOKUP_BREAKER_WINDOW:20}
+        minimum-number-of-calls: ${PRODUCT_LOOKUP_BREAKER_MIN_CALLS:10}
+        failure-rate-threshold: ${PRODUCT_LOOKUP_BREAKER_FAILURE_RATE:50}
+        slow-call-rate-threshold: ${PRODUCT_LOOKUP_BREAKER_SLOW_RATE:50}
+        slow-call-duration-threshold: ${PRODUCT_LOOKUP_TIMEOUT:150ms}
+        wait-duration-in-open-state: ${PRODUCT_LOOKUP_BREAKER_OPEN_SECONDS:10}s
+        permitted-number-of-calls-in-half-open-state: ${PRODUCT_LOOKUP_BREAKER_HALF_OPEN_CALLS:5}
+        automatic-transition-from-open-to-half-open-enabled: true
+
+spring.cloud.circuitbreaker.resilience4j:
+  disable-time-limiter: true
 
 cart:
   snapshot-cleanup:

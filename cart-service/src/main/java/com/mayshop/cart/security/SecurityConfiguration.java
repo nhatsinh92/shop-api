@@ -2,6 +2,7 @@ package com.mayshop.cart.security;
 
 import com.mayshop.cart.web.Problems;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,8 +33,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Bearer verification against the JWKS of {@code core}, and the caller identity of the cart
- * endpoints. Only the health endpoints are public at the filter level; an anonymous caller of
- * {@code /api/cart/**} is a guest, which {@link CallerIdentityFilter} decides.
+ * endpoints. Actuator paths are public at the filter level; an anonymous caller of {@code
+ * /api/cart/**} is a guest, which {@link CallerIdentityFilter} decides.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(CartAuthProperties.class)
@@ -87,7 +88,19 @@ class SecurityConfiguration implements WebMvcConfigurer {
         .logout(AbstractHttpConfigurer::disable)
         .requestCache(cache -> cache.disable())
         .authorizeHttpRequests(auth ->
-            auth.requestMatchers("/actuator/health", "/actuator/health/**")
+            // Only the endpoints the app port serves are public (health and info, bridged by
+            // management.AppPortActuatorConfiguration), plus prometheus, which has no handler on
+            // this port and so answers 404 (owner decision); any other actuator path needs a
+            // token. The management port is internal and never published.
+            auth.dispatcherTypeMatchers(DispatcherType.ERROR)
+                // The error dispatch of a handled 404 (unknown health group) must not turn into a
+                // 401. Requests are authorized before they reach it, so this opens nothing new.
+                .permitAll()
+                .requestMatchers(
+                    "/actuator/health",
+                    "/actuator/health/**",
+                    "/actuator/info",
+                    "/actuator/prometheus")
                 .permitAll()
                 // Guests are allowed here; CallerIdentityFilter rejects the unverifiable.
                 .requestMatchers("/api/cart", "/api/cart/**")
