@@ -10,9 +10,14 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Drops {@code product:{sku}} and {@code product-stale:{sku}} for every {@code product.updated}
- * event, whatever it changed. It runs on the Kafka listener thread, never on a request path; a
- * malformed record is logged and skipped.
+ * Drops the cached product of every {@code product.updated} event. It runs on the Kafka listener
+ * thread, never on a request path; a malformed record is logged and skipped.
+ *
+ * <p>An event whose {@code changes} are only {@code STOCK} deletes {@code product:{sku}} and keeps
+ * {@code product-stale:{sku}}: {@code core} publishes one for every stock hold and release, and
+ * deleting the stale entry too would leave the hottest SKUs without a fallback exactly when {@code
+ * core} is slow (#197). Any other event (a price or detail change, or no readable {@code changes})
+ * deletes both, so a changed price is never served from the stale entry.
  */
 @Component
 public class ProductUpdatedConsumer {
@@ -29,24 +34,45 @@ public class ProductUpdatedConsumer {
 
   @KafkaListener(topics = "product.updated", groupId = "cart-service")
   public void onProductUpdated(String value) {
-    String sku = skuOf(value);
+    JsonNode event = parse(value);
+    String sku = skuOf(event);
     if (sku == null) {
       LOG.warn("Skipping a malformed product.updated record");
       return;
     }
     redis.delete(ProductLookupService.key(sku));
-    redis.delete(ProductLookupService.staleKey(sku));
+    if (!stockOnly(event)) {
+      redis.delete(ProductLookupService.staleKey(sku));
+    }
   }
 
-  private String skuOf(String value) {
+  private JsonNode parse(String value) {
     if (value == null) {
       return null;
     }
     try {
-      JsonNode sku = json.readTree(value).get("sku");
-      return sku != null && sku.isString() && !sku.asString().isBlank() ? sku.asString() : null;
+      return json.readTree(value);
     } catch (JacksonException e) {
       return null;
     }
+  }
+
+  private static String skuOf(JsonNode event) {
+    JsonNode sku = event == null ? null : event.get("sku");
+    return sku != null && sku.isString() && !sku.asString().isBlank() ? sku.asString() : null;
+  }
+
+  /** True when {@code changes} is a non-empty array holding only {@code "STOCK"}. */
+  private static boolean stockOnly(JsonNode event) {
+    JsonNode changes = event.get("changes");
+    if (changes == null || !changes.isArray() || changes.isEmpty()) {
+      return false;
+    }
+    for (JsonNode change : changes) {
+      if (!change.isString() || !"STOCK".equals(change.asString())) {
+        return false;
+      }
+    }
+    return true;
   }
 }
