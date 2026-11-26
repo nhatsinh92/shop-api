@@ -29,6 +29,8 @@ const BROWSE_VUS = Number(__ENV.BROWSE_VUS || 50);
 const CART_VUS = Number(__ENV.CART_VUS || 50);
 const CHECKOUT_VUS = Number(__ENV.CHECKOUT_VUS || 20);
 const USER_COUNT = 200;
+// Rounds of CART_VUS parallel cart reads at the end of setup (see setup()).
+const WARMUP_ROUNDS = Number(__ENV.WARMUP_ROUNDS || 5);
 
 // Timeline in seconds from the start of the scenarios.
 const TOTAL_S = 180;
@@ -64,6 +66,9 @@ function scenario(vus, fn) {
 
 export const options = {
   setupTimeout: '5m', // 200 BCrypt logins
+  // http.batch is used only by the setup warm-up; let it send CART_VUS reads at once.
+  batch: CART_VUS,
+  batchPerHost: CART_VUS,
   scenarios: {
     browse: scenario(BROWSE_VUS, 'browse'),
     cart: scenario(CART_VUS, 'cart'),
@@ -204,6 +209,15 @@ export function setup() {
     guest = guest || cookie(res, 'guest_cart');
   }
   http.get(`${BASE_URL}/api/cart`, { headers: { Cookie: `guest_cart=${guest}` }, tags: { kind: 'setup' } });
+  // Warm the concurrent cart path too: the first burst of CART_VUS parallel reads otherwise opens
+  // the gateway's upstream connections and starts cart-service's request threads, and on a stack
+  // that has just started a few of those first reads overran the 300 ms cart-read timeout.
+  const warmRead = ['GET', `${BASE_URL}/api/cart`, null, {
+    headers: { Cookie: `guest_cart=${guest}` }, tags: { kind: 'setup' },
+  }];
+  for (let round = 0; round < WARMUP_ROUNDS; round++) {
+    http.batch(Array.from({ length: CART_VUS }, () => warmRead));
+  }
   runStartMs = Date.now();
   return { sessions, products, startMs: runStartMs };
 }
