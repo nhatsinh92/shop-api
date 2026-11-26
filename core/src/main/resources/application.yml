@@ -84,6 +84,13 @@ product:
     url: ${WEB_REVALIDATE_URL:}
     # Signs the webhook (HMAC-SHA256). Required when the URL is set.
     secret: ${REVALIDATE_SECRET:}
+  sale-window:
+    # Publishes a price event per SKU when a flash-sale window starts or ends; false turns it off
+    # (tests).
+    enabled: ${PRODUCT_SALE_WINDOW_ENABLED:true}
+    interval: ${PRODUCT_SALE_WINDOW_INTERVAL:PT15S}
+    # A boundary older than this is recorded as fired without publishing (first deploy).
+    lookback: ${PRODUCT_SALE_WINDOW_LOOKBACK:PT10M}
   member-price:
     # Discount in percent per member tier; the result is rounded down to a multiple of 500 VND.
     discounts:
