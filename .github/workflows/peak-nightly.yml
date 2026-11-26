@@ -28,10 +28,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Diagnostics (#201): the runner's size, docker stats every 5 s during the run and the full
+      # container logs, so a saturated runner can be told apart from a code regression.
+      - name: Runner resources
+        run: |
+          mkdir -p build/peak-diagnostics
+          {
+            echo "nproc: $(nproc)"
+            free -m
+            docker info --format 'docker: {{.NCPU}} CPUs, {{.MemTotal}} bytes'
+          } | tee build/peak-diagnostics/runner.txt
       - name: Run the peak scenario
         id: peak
         continue-on-error: true
-        run: make demo-peak
+        run: |
+          ( while true; do
+              date -u +%FT%TZ
+              docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' || true
+              sleep 5
+            done ) > build/peak-diagnostics/docker-stats.log 2>&1 &
+          sampler=$!
+          trap 'kill "$sampler" 2>/dev/null || true' EXIT
+          make demo-peak
       - name: Upload the k6 summary
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -78,6 +96,19 @@ jobs:
       - name: Logs on failure
         if: steps.peak.outcome == 'failure'
         run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.peak.yml --profile peak logs --no-color --tail=100
+      - name: Collect the container logs
+        if: always()
+        run: |
+          mkdir -p build/peak-diagnostics
+          docker compose -f infra/docker-compose.yml -f infra/docker-compose.peak.yml --profile peak \
+            logs --no-color --timestamps > build/peak-diagnostics/compose.log 2>&1 || true
+      - name: Upload the diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: peak-diagnostics
+          path: build/peak-diagnostics/
+          if-no-files-found: warn
       - name: Stop
         if: always()
         run: make demo-down
