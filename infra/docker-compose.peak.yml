@@ -1,8 +1,13 @@
 # Overlay for `make demo-peak`: the gateway reaches cart-service through toxiproxy so latency
-# and faults can be injected (toxiproxy API on :8474). Used together with docker-compose.yml.
+# and faults can be injected (toxiproxy API on :8474; shop-web's server uses :18083). Used together
+# with docker-compose.yml. Peak rate limits let k6 from one IP through; per-user checkout limits
+# (GATEWAY_CHECKOUT_RESERVATION_RATE, GATEWAY_ORDER_RATE) stay at their defaults.
 services:
   gateway:
     environment:
       CART_SERVICE_URL: http://toxiproxy:18082
+      GATEWAY_CORE_RATE: "5000"
+      GATEWAY_CORE_BURST: "10000"
+      GATEWAY_LOGIN_PER_IP_PER_MINUTE: "100000"
     depends_on:
       toxiproxy: { condition: service_started }

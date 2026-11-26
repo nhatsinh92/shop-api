@@ -18,7 +18,7 @@ COMPOSE := AUTH_JWT_PRIVATE_KEY="$$(cat $(DEMO_KEY) 2>/dev/null || true)" \
 	docker compose -f infra/docker-compose.yml
 COMPOSE_PEAK := $(COMPOSE) -f infra/docker-compose.peak.yml --profile peak
 
-.PHONY: help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart demo-smoke-checkout demo-k6-cart seed lock test-scripts contract-breaking
+.PHONY: flag cart-restore help test lint lint-java lint-contract bundle-contract build demo demo-peak demo-down demo-key demo-smoke-auth demo-smoke-product demo-smoke-cart demo-smoke-checkout demo-k6-cart seed lock test-scripts contract-breaking
 
 help: ## Show targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -69,10 +69,15 @@ demo: $(DEMO_SECRETS) ## Start the full stack in Docker, wait until healthy, loa
 
 demo-peak: $(DEMO_SECRETS) ## Demo plus toxiproxy in front of cart-service, a k6 run and Grafana (:3001)
 	$(COMPOSE_PEAK) up -d --build --wait \
-		postgres redis redpanda mock-payment core cart-service toxiproxy gateway grafana
+		postgres redis redpanda mock-payment core cart-service toxiproxy gateway prometheus grafana
 	$(COMPOSE) run --rm seed
 	$(COMPOSE_PEAK) run --rm k6
-	@echo "grafana http://localhost:3001  toxiproxy API http://localhost:8474"
+	@echo "grafana http://localhost:3001 (dashboard: Mây peak)  prometheus http://localhost:9090  toxiproxy API http://localhost:8474"
+
+flag: ## Switch a feature flag in the demo Redis: make flag NAME=online-payment VALUE=off (a Redis loss resets flags to their defaults)
+	@case "$(NAME)" in ''|*[!a-z0-9-]*|-*|*-) echo "NAME must be a kebab-case flag, e.g. recommendations"; exit 2;; esac
+	@case "$(VALUE)" in on|off) ;; *) echo "VALUE must be on or off"; exit 2;; esac
+	$(COMPOSE) exec -T redis redis-cli HSET flags $(NAME) $(VALUE)
 
 demo-down: ## Stop the demo stack (keeps the database volume)
 	$(COMPOSE_PEAK) down
