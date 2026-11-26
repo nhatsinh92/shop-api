@@ -59,8 +59,9 @@ jobs:
               echo "| --- | --- | --- |"
               jq -r '.metrics | to_entries[] | select(.value.thresholds != null)
                 | .key as $m | .value.thresholds | to_entries[]
-                | "| \($m) | \(.key) | \(if .value.ok == false or .value == true then "FAILED" else "ok" end) |"' \
-                build/k6/peak-summary.json
+                | "| \($m) | \(.key) | \(if (if (.value | type) == "object" then (.value.ok == false) else (.value == true) end) then "FAILED" else "ok" end) |"' \
+                build/k6/peak-summary.json \
+                || echo "| - | - | Could not parse the k6 summary, see the artifact. |"
             else
               echo "No k6 summary was produced: the stack or k6 failed before the run finished. See the job log."
             fi
