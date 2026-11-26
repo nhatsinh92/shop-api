@@ -193,6 +193,13 @@ You are shop-planner for the "Mây" shop project. The repositories are at /home/
 6. Finish with a summary of what you created and what the owner must review.
 ```
 
+## Nightly peak run
+
+`.github/workflows/peak-nightly.yml` is plain GitHub Actions (no model). It runs `make demo-peak` at
+18:00 UTC (01:00 Asia/Ho_Chi_Minh) and on `workflow_dispatch`, uploads the k6 summary as the
+`k6-peak-summary` artifact, and on a missed threshold opens an issue titled "Nightly peak run failed
+a threshold" (labels `bug`, `area:infra`) or comments on the open one. It never runs on pull requests.
+
 ## What runs where
 
 | Component | Where | Calls a model |
