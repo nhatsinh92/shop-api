@@ -53,6 +53,24 @@ class ManagementPortTest {
   }
 
   @Test
+  void otherActuatorPathsOnTheAppPortRequireAToken() throws Exception {
+    assertThat(get(appPort, "/actuator/env")).isEqualTo(401);
+    assertThat(get(appPort, "/actuator")).isEqualTo(401);
+  }
+
+  @Test
+  void anInvalidBearerOnACartPathStillAnswers401() throws Exception {
+    int status =
+        http.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + appPort + "/api/cart"))
+                    .header("Authorization", "Bearer not-a-token")
+                    .build(),
+                HttpResponse.BodyHandlers.ofString())
+            .statusCode();
+    assertThat(status).isEqualTo(401);
+  }
+
+  @Test
   void healthAndInfoAnswer200OnBothPorts() throws Exception {
     for (int port : new int[] {appPort, managementPort}) {
       assertThat(get(port, "/actuator/health")).isEqualTo(200);

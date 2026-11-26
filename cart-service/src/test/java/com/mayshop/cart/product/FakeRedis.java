@@ -50,19 +50,20 @@ final class FakeRedis {
   private final MutableClock clock;
   final StringRedisTemplate template = mock(StringRedisTemplate.class);
 
-  @SuppressWarnings("unchecked")
   FakeRedis(MutableClock clock) {
     this.clock = clock;
-    ValueOperations<String, String> ops = mock(ValueOperations.class);
-    when(template.opsForValue()).thenReturn(ops);
-    when(ops.multiGet(any(Collection.class)))
-        .thenAnswer(call -> {
-          List<String> values = new ArrayList<>();
-          for (Object key : (Collection<Object>) call.getArgument(0)) {
-            values.add(get(key.toString()));
-          }
-          return values;
-        });
+    ValueOperations<?, ?> ops = mock(ValueOperations.class);
+    doAnswer(call -> ops).when(template).opsForValue();
+    doAnswer(
+            call -> {
+              List<String> values = new ArrayList<>();
+              for (Object key : call.<Collection<?>>getArgument(0)) {
+                values.add(get(key.toString()));
+              }
+              return values;
+            })
+        .when(ops)
+        .multiGet(any());
     doAnswer(
             call -> {
               entries.put(
@@ -72,7 +73,7 @@ final class FakeRedis {
               return null;
             })
         .when(ops)
-        .set(anyString(), anyString(), any(Duration.class));
+        .set(any(), any(), any(Duration.class));
     when(template.delete(anyString()))
         .thenAnswer(call -> entries.remove((String) call.getArgument(0)) != null);
   }

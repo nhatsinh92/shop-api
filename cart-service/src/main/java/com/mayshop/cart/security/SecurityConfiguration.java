@@ -88,14 +88,19 @@ class SecurityConfiguration implements WebMvcConfigurer {
         .logout(AbstractHttpConfigurer::disable)
         .requestCache(cache -> cache.disable())
         .authorizeHttpRequests(auth ->
-            // Actuator is public at the filter level. Which endpoints exist where is decided by the
-            // exposure settings: the app port has handlers for health and info only (see
-            // management.AppPortActuatorConfiguration), so prometheus there is a 404, not a 401;
-            // the management port is internal and never published.
+            // Only the endpoints the app port serves are public (health and info, bridged by
+            // management.AppPortActuatorConfiguration), plus prometheus, which has no handler on
+            // this port and so answers 404 (owner decision); any other actuator path needs a
+            // token. The management port is internal and never published.
             auth.dispatcherTypeMatchers(DispatcherType.ERROR)
-                // The error dispatch of a 404 must not turn into a 401.
+                // The error dispatch of a handled 404 (unknown health group) must not turn into a
+                // 401. Requests are authorized before they reach it, so this opens nothing new.
                 .permitAll()
-                .requestMatchers("/actuator", "/actuator/**")
+                .requestMatchers(
+                    "/actuator/health",
+                    "/actuator/health/**",
+                    "/actuator/info",
+                    "/actuator/prometheus")
                 .permitAll()
                 // Guests are allowed here; CallerIdentityFilter rejects the unverifiable.
                 .requestMatchers("/api/cart", "/api/cart/**")
