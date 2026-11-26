@@ -108,3 +108,23 @@ flags:
   # Used when Redis (hash `flags`) has no usable value or is down: comma-separated name=on|off,
   # for example `recommendations=off,member-price=on`. Flags not listed are on.
   defaults: ${FLAGS_DEFAULTS:}
+
+# Breaker `payment` (checkout.Payments). Slow = the charge reached its timeout. The time limiter is
+# disabled: Spring Cloud CircuitBreaker's default 1 s limiter would cut a charge before
+# PAYMENT_TIMEOUT (3 s), so the HTTP client's read timeout is the only time bound.
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: ${PAYMENT_BREAKER_WINDOW:20}
+        minimum-number-of-calls: ${PAYMENT_BREAKER_MIN_CALLS:10}
+        failure-rate-threshold: ${PAYMENT_BREAKER_FAILURE_RATE:50}
+        slow-call-rate-threshold: ${PAYMENT_BREAKER_SLOW_RATE:50}
+        slow-call-duration-threshold: ${PAYMENT_TIMEOUT:3s}
+        wait-duration-in-open-state: ${PAYMENT_BREAKER_OPEN_SECONDS:10}s
+        permitted-number-of-calls-in-half-open-state: ${PAYMENT_BREAKER_HALF_OPEN_CALLS:5}
+        automatic-transition-from-open-to-half-open-enabled: true
+
+spring.cloud.circuitbreaker.resilience4j:
+  disable-time-limiter: true
