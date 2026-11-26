@@ -28,6 +28,12 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
   SLOW_RATE|OPEN_SECONDS|HALF_OPEN_CALLS`); slow = the route's timeout. The Resilience4j time limiter
   is disabled so the route `response-timeout` is the only bound. A timeout, connect error or
   upstream 5xx (`statusCodes` 500, 502, 503, 504) counts; 4xx never does.
+- No bulkhead: `spring.cloud.circuitbreaker.bulkhead.resilience4j.enabled` is `false`
+  (`GATEWAY_BREAKER_BULKHEAD_ENABLED`). `resilience4j-bulkhead` is on the classpath, and Spring Cloud
+  CircuitBreaker would otherwise put a 25-call semaphore bulkhead on every breaker route; a call over
+  it answers 500 and counts as a breaker failure, so concurrency alone opened the cart breakers at
+  peak (#195). The gateway is reactive (a waiting call holds no thread); timeouts, breakers and rate
+  limits protect the upstreams. `BreakerConcurrencyTest` covers it.
 - Fallback: `FallbackHandler` answers failed breaker calls 503 `SERVICE_UNAVAILABLE` (`Retry-After: 2`,
   `Cache-Control: no-store`) and counts `gateway.fallback{route, reason=timeout|circuit_open|
   upstream_error}`. No retries, no `.block()`.

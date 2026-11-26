@@ -18,6 +18,11 @@ class JdbcAvailabilityQueries implements AvailabilityQueries {
     this.jdbc = jdbc;
   }
 
+  /**
+   * The sale prices are read after the variant query has returned: reading them from inside its row
+   * mapper would take a second pool connection while the first is still held, which deadlocks the
+   * pool under concurrent requests.
+   */
   @Override
   public Optional<AvailabilityRow> findBySku(String sku) {
     return jdbc.sql(
@@ -29,14 +34,22 @@ class JdbcAvailabilityQueries implements AvailabilityQueries {
             """)
         .param(sku)
         .query((rs, n) ->
-            new AvailabilityRow(
+            new VariantStock(
                 rs.getObject("product_id", UUID.class),
                 rs.getString("sku"),
                 rs.getLong("price"),
-                rs.getInt("quantity"),
-                salePrices(sku)))
-        .optional();
+                rs.getInt("quantity")))
+        .optional()
+        .map(variant ->
+            new AvailabilityRow(
+                variant.productId(),
+                variant.sku(),
+                variant.price(),
+                variant.quantity(),
+                salePrices(sku)));
   }
+
+  private record VariantStock(UUID productId, String sku, long price, int quantity) {}
 
   private List<SalePrice> salePrices(String sku) {
     return jdbc.sql(
