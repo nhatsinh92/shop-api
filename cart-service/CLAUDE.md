@@ -44,7 +44,10 @@ be cheap, bounded and observable.
   open no call is made and `ProductLookupException.Reason.CIRCUIT_OPEN` is raised.
 - Each product is cached twice: `product:{sku}` (fresh, 60 s) and `product-stale:{sku}` (`PRODUCT_LOOKUP_STALE_TTL`,
   default 10 min). When `core` fails, times out or the breaker is open, `ProductLookupService` serves
-  the stale entries; only SKUs with no entry at all lead to 503. `product.updated` deletes both keys.
+  the stale entries; only SKUs with no entry at all lead to 503. `product.updated` deletes both keys,
+  except an event whose `changes` are only `STOCK`: it deletes only `product:{sku}` and keeps the
+  stale entry (`core` publishes one per stock hold and release; #197). A price or detail change, or
+  an event without a readable `changes` array, deletes both, so a changed price is never served stale.
 - Metrics: `cart.product_cache{result=hit|stale|miss}`, `cart.product_lookup.failed{reason=timeout|error|circuit_open}`,
   timer `cart.product_lookup` (percentiles histogram), `resilience4j_circuitbreaker_*`.
 
