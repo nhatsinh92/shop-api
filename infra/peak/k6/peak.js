@@ -125,10 +125,23 @@ function toxicApi(method, path, body) {
   });
 }
 
-function removeToxics() {
-  for (const proxy of PROXIES) {
-    toxicApi('DELETE', `/proxies/${proxy}/toxics/${TOXIC_NAME}`);
+// A failed DELETE (seen: EOF on a kept-alive connection to the toxiproxy API) would leave the
+// toxic on for the rest of the run, so it is retried; 404 means it is already gone.
+function removeToxic(proxy) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = toxicApi('DELETE', `/proxies/${proxy}/toxics/${TOXIC_NAME}`);
+    if ((res.status >= 200 && res.status < 300) || res.status === 404) return true;
+    sleep(0.2);
   }
+  return false;
+}
+
+function removeToxics() {
+  return PROXIES.map((proxy) => {
+    const removed = removeToxic(proxy);
+    check(null, { [`latency toxic removed from ${proxy}`]: () => removed });
+    return removed;
+  });
 }
 
 function addToxics() {
