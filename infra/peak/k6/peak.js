@@ -336,7 +336,10 @@ function uuid() {
 export function checkout(data) {
   init(data);
   // Spread the iterations over all load users (each user's session was made once in setup).
-  const slot = (exec.vu.idInTest - 1) + exec.vu.iterationInScenario * CHECKOUT_VUS;
+  // The scenario's own iteration counter: VU ids are numbered across all scenarios, so ids of
+  // checkout VUs are not contiguous and an id-based slot sent some users several VUs' iterations,
+  // over the per-user reservation limit.
+  const slot = exec.scenario.iterationInTest;
   const auth = { ...jsonHeaders, Cookie: data.sessions[slot % USER_COUNT] };
 
   const reserved = http.post(
