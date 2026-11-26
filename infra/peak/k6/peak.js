@@ -29,6 +29,9 @@ const BROWSE_VUS = Number(__ENV.BROWSE_VUS || 50);
 const CART_VUS = Number(__ENV.CART_VUS || 50);
 const CHECKOUT_VUS = Number(__ENV.CHECKOUT_VUS || 20);
 const USER_COUNT = 200;
+// Setup logs users in LOGIN_BATCH at a time (BCrypt in core; 20 at once overran the 1 s core
+// route timeout).
+const LOGIN_BATCH = 6;
 // Rounds of CART_VUS parallel cart reads at the end of setup (see setup()).
 const WARMUP_ROUNDS = Number(__ENV.WARMUP_ROUNDS || 5);
 
@@ -66,7 +69,7 @@ function scenario(vus, fn) {
 
 export const options = {
   setupTimeout: '5m', // 200 BCrypt logins
-  // http.batch is used only by the setup warm-up; let it send CART_VUS reads at once.
+  // Lets the setup warm-up send CART_VUS reads at once; logins stay LOGIN_BATCH at a time.
   batch: CART_VUS,
   batchPerHost: CART_VUS,
   scenarios: {
@@ -190,9 +193,9 @@ function loginBatch(emails) {
 export function setup() {
   removeToxics();
   const sessions = [];
-  for (let i = 1; i <= USER_COUNT; i += 20) {
+  for (let i = 1; i <= USER_COUNT; i += LOGIN_BATCH) {
     const batch = [];
-    for (let j = i; j < i + 20 && j <= USER_COUNT; j++) batch.push(`load-${String(j).padStart(4, '0')}@example.com`);
+    for (let j = i; j < i + LOGIN_BATCH && j <= USER_COUNT; j++) batch.push(`load-${String(j).padStart(4, '0')}@example.com`);
     sessions.push(...loginBatch(batch));
   }
   const list = http.get(`${BASE_URL}/api/products?limit=50`, { tags: { kind: 'setup' } });
