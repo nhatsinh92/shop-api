@@ -13,7 +13,8 @@
 // over all users. Cart VUs are guests, so they never log in.
 //
 // Request tags: kind = browse | cart_read | cart_write | reservation | order | replay, and
-// phase = toxic | normal (the toxic window plus TOXIC_GRACE_S for the breaker to close again).
+// phase = toxic | normal (the toxic window, from TOXIC_LEAD_S before it for the requests in flight
+// when the toxic is added, to TOXIC_GRACE_S after it for the breaker to close again).
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
@@ -42,6 +43,10 @@ const TOXIC_END_S = 120;
 // The gateway breaker stays open for 10 s after the toxic is gone (gateway/CLAUDE.md), so a 503
 // SERVICE_UNAVAILABLE right after the window is still the expected fallback.
 const TOXIC_GRACE_S = Number(__ENV.TOXIC_GRACE_S || 10);
+// A request is tagged when it starts, so one that starts just before the toxic is added is slowed by
+// it and can get the 503 fallback: the window opens TOXIC_LEAD_S early (more than the 300 ms
+// cart-read timeout).
+const TOXIC_LEAD_S = Number(__ENV.TOXIC_LEAD_S || 1);
 // Each cart VU compares its cart with its own writes once, in the last seconds of the run.
 const CONVERGE_AT_S = TOTAL_S - 10;
 const PROXIES = ['cart-service', 'cart-service-web'];
@@ -118,7 +123,7 @@ let runStartMs = 0;
 
 function phase() {
   const t = (Date.now() - runStartMs) / 1000;
-  return t >= TOXIC_START_S && t < TOXIC_END_S + TOXIC_GRACE_S ? 'toxic' : 'normal';
+  return t >= TOXIC_START_S - TOXIC_LEAD_S && t < TOXIC_END_S + TOXIC_GRACE_S ? 'toxic' : 'normal';
 }
 
 function tags(kind) {
