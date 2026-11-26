@@ -36,6 +36,25 @@ be cheap, bounded and observable.
   (`web/Problems`, `CartExceptionHandler`); Redis connection failures are 503 `SERVICE_UNAVAILABLE`.
 - Contract tests use `ContractValidator.cart()` (spec bundled by the `bundleContract` Gradle task).
 
+## Product lookup resilience (package `product/`)
+
+- `CoreProductClient` calls `core` through Resilience4J breaker `product-lookup`
+  (`resilience4j.circuitbreaker.instances.product-lookup`, every value an environment variable
+  `PRODUCT_LOOKUP_BREAKER_*`; slow = `PRODUCT_LOOKUP_TIMEOUT`, time limiter disabled). While it is
+  open no call is made and `ProductLookupException.Reason.CIRCUIT_OPEN` is raised.
+- Each product is cached twice: `product:{sku}` (fresh, 60 s) and `product-stale:{sku}` (`PRODUCT_LOOKUP_STALE_TTL`,
+  default 10 min). When `core` fails, times out or the breaker is open, `ProductLookupService` serves
+  the stale entries; only SKUs with no entry at all lead to 503. `product.updated` deletes both keys.
+- Metrics: `cart.product_cache{result=hit|stale|miss}`, `cart.product_lookup.failed{reason=timeout|error|circuit_open}`,
+  timer `cart.product_lookup` (percentiles histogram), `resilience4j_circuitbreaker_*`.
+
+## Management port
+
+- `management.server.port` = `MANAGEMENT_PORT` (default 9082, not published by compose) serves `health`,
+  `info` and `prometheus`. The app port serves only `health` and `info`, through
+  `management/AppPortActuatorConfiguration` (a bridge over the actuator beans), so the compose healthcheck keeps
+  working. `/actuator/prometheus` on the app port is a 404 (`ManagementPortTest`).
+
 ## Write-behind (package `writebehind/`)
 
 - Every successful add, update, remove and merge sends a `CartUpdated` JSON record to topic

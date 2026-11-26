@@ -12,6 +12,7 @@ jacoco = "0.8.16"
 
 [libraries]
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+spring-cloud-starter-circuitbreaker-resilience4j = { module = "org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j" }
 spring-cloud-bom = { module = "org.springframework.cloud:spring-cloud-dependencies", version.ref = "spring-cloud" }
 spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }

@@ -2,6 +2,7 @@ package com.mayshop.cart.security;
 
 import com.mayshop.cart.web.Problems;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,8 +33,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Bearer verification against the JWKS of {@code core}, and the caller identity of the cart
- * endpoints. Only the health endpoints are public at the filter level; an anonymous caller of
- * {@code /api/cart/**} is a guest, which {@link CallerIdentityFilter} decides.
+ * endpoints. Actuator paths are public at the filter level; an anonymous caller of {@code
+ * /api/cart/**} is a guest, which {@link CallerIdentityFilter} decides.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(CartAuthProperties.class)
@@ -87,7 +88,14 @@ class SecurityConfiguration implements WebMvcConfigurer {
         .logout(AbstractHttpConfigurer::disable)
         .requestCache(cache -> cache.disable())
         .authorizeHttpRequests(auth ->
-            auth.requestMatchers("/actuator/health", "/actuator/health/**")
+            // Actuator is public at the filter level. Which endpoints exist where is decided by the
+            // exposure settings: the app port has handlers for health and info only (see
+            // management.AppPortActuatorConfiguration), so prometheus there is a 404, not a 401;
+            // the management port is internal and never published.
+            auth.dispatcherTypeMatchers(DispatcherType.ERROR)
+                // The error dispatch of a 404 must not turn into a 401.
+                .permitAll()
+                .requestMatchers("/actuator", "/actuator/**")
                 .permitAll()
                 // Guests are allowed here; CallerIdentityFilter rejects the unverifiable.
                 .requestMatchers("/api/cart", "/api/cart/**")

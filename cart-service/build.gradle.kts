@@ -3,9 +3,21 @@ plugins {
     alias(libs.plugins.spring.dependency.management)
 }
 
+dependencyManagement {
+    imports {
+        mavenBom(
+            libs.spring.cloud.bom
+                .get()
+                .toString(),
+        )
+    }
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation(libs.micrometer.registry.prometheus)
+    implementation(libs.spring.cloud.starter.circuitbreaker.resilience4j)
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

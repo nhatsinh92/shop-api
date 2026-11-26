@@ -10,8 +10,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Drops {@code product:{sku}} for every {@code product.updated} event, whatever it changed. It runs
- * on the Kafka listener thread, never on a request path; a malformed record is logged and skipped.
+ * Drops {@code product:{sku}} and {@code product-stale:{sku}} for every {@code product.updated}
+ * event, whatever it changed. It runs on the Kafka listener thread, never on a request path; a
+ * malformed record is logged and skipped.
  */
 @Component
 public class ProductUpdatedConsumer {
@@ -34,6 +35,7 @@ public class ProductUpdatedConsumer {
       return;
     }
     redis.delete(ProductLookupService.key(sku));
+    redis.delete(ProductLookupService.staleKey(sku));
   }
 
   private String skuOf(String value) {
