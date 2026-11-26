@@ -123,6 +123,13 @@ resilience4j:
 spring.cloud.circuitbreaker.resilience4j:
   disable-time-limiter: true
 
+# No bulkhead on the breaker routes. resilience4j-bulkhead is on the classpath, so Spring Cloud
+# CircuitBreaker would otherwise wrap every breaker call in a 25-call semaphore bulkhead: a call over
+# that limit answers 500 and counts as a breaker failure, opening the cart breakers while
+# cart-service is healthy (#195). The gateway is reactive, so a waiting call holds no thread.
+spring.cloud.circuitbreaker.bulkhead.resilience4j:
+  enabled: ${GATEWAY_BREAKER_BULKHEAD_ENABLED:false}
+
 management:
   # Prometheus is served on the internal management port only; the app port exposes health and info.
   server:
