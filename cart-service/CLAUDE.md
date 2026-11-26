@@ -48,6 +48,17 @@ be cheap, bounded and observable.
 - Metrics: `cart.product_cache{result=hit|stale|miss}`, `cart.product_lookup.failed{reason=timeout|error|circuit_open}`,
   timer `cart.product_lookup` (percentiles histogram), `resilience4j_circuitbreaker_*`.
 
+## Flash-sale warm-up (`product/FlashSaleWarmup`)
+
+- After `ApplicationReadyEvent` and then every `CART_WARMUP_INTERVAL` (default 60 s, measured from the end of the
+  previous run) it calls `GET {CORE_URL}/api/flash-sales/current` (timeout `CART_WARMUP_TIMEOUT`, default 2 s) and
+  looks the sale's SKUs up through `ProductLookupService`, which fills `product:{sku}`. It runs on its own daemon
+  thread, so a slow `core` never delays start-up. 404 (no sale) is a no-op.
+- A failure (timeout, 5xx, connection refused, unparsable body, lookup failure) is logged and counted as
+  `cart.warmup.failed`; the schedule goes on. Entries are fresh for 60 s, so the lookup only refetches expired ones.
+- Off when `cart.warmup.enabled` is not `true` (`CART_WARMUP_ENABLED`, default true). The tests turn it off in
+  `src/test/resources/config/application.properties`; a test that needs it sets the property itself.
+
 ## Management port
 
 - `management.server.port` = `MANAGEMENT_PORT` (default 9082, not published by compose) serves `health`,
