@@ -4,5 +4,11 @@
     "listen": "0.0.0.0:18082",
     "upstream": "cart-service:8082",
     "enabled": true
+  },
+  {
+    "name": "cart-service-web",
+    "listen": "0.0.0.0:18083",
+    "upstream": "cart-service:8082",
+    "enabled": true
   }
 ]
