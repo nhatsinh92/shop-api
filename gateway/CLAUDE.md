@@ -72,6 +72,9 @@ actuator. Reactive: never block (no JDBC, no `RestTemplate`, no `.block()`).
   It keys the per-IP login limit and the IP fallback of the core bucket. Production: set it to the
   ingress CIDR only (never `0.0.0.0/0`), and make the ingress append to, not trust, client
   `X-Forwarded-For`. The demo compose file trusts the private Docker ranges.
+  shop-web's local `/api/*` rewrite (Next 16) sends no `X-Forwarded-For`, so locally every user
+  reaches the gateway with the web server's address (shop-web#157); only the ingress path carries
+  the client IP. `infra/smoke-auth.sh` step 8 reports that as a NOTE.
 - `LOGGING_LEVEL_COM_MAYSHOP_GATEWAY_RATELIMIT=DEBUG` logs `Client IP <ip> for <method> <path>` for
   rate-limited routes (never at INFO).
 - `RedisRateLimiter` runs Lua scripts (`resources/ratelimit/`). It **fails open** with a WARN when Redis
